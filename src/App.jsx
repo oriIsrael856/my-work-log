@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Calendar, Clock, FileText, BarChart3, Save, Briefcase, Moon, Sun } from 'lucide-react';
+import { Plus, Trash2, Calendar, Clock, BarChart3, Save, Briefcase, Download } from 'lucide-react';
 
 const WorkLogApp = () => {
   // State for form inputs
@@ -57,6 +57,45 @@ const WorkLogApp = () => {
     }
   };
 
+  // --- פונקציית הייצוא החדשה ---
+  const handleExportToExcel = () => {
+    // 1. זיהוי החודש והשנה מהתאריך שנבחר כרגע בטופס
+    const selectedDate = new Date(date);
+    const targetMonth = selectedDate.getMonth();
+    const targetYear = selectedDate.getFullYear();
+
+    // 2. סינון הרשומות לאותו חודש
+    const monthlyEntries = entries.filter(entry => {
+      const entryDate = new Date(entry.date);
+      return entryDate.getMonth() === targetMonth && entryDate.getFullYear() === targetYear;
+    });
+
+    if (monthlyEntries.length === 0) {
+      alert(`לא נמצאו רשומות לייצוא עבור חודש ${targetMonth + 1}/${targetYear}`);
+      return;
+    }
+
+    // 3. יצירת תוכן ה-CSV (כולל BOM לתמיכה בעברית באקסל)
+    const csvHeader = "תאריך,שעות,תיאור\n";
+    const csvRows = monthlyEntries.map(e => {
+      // עוטפים את התיאור במרכאות כדי למנוע בעיות עם פסיקים בתוך הטקסט
+      const safeDescription = `"${e.description.replace(/"/g, '""')}"`;
+      return `${e.date},${e.hours},${safeDescription}`;
+    }).join("\n");
+
+    const csvContent = "\uFEFF" + csvHeader + csvRows; // ה-\uFEFF חובה לעברית באקסל
+
+    // 4. יצירת קובץ והורדה
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `work_log_${targetYear}_${targetMonth + 1}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const totalHours = entries.reduce((sum, entry) => sum + entry.hours, 0);
 
   const formatDate = (dateString) => {
@@ -65,7 +104,6 @@ const WorkLogApp = () => {
   };
 
   return (
-    // Main container with full centering and dark background for high contrast change
     <div className="min-h-screen w-full flex items-center justify-center bg-slate-900 p-4 md:p-8 font-sans" dir="rtl">
       
       <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-700">
@@ -92,10 +130,22 @@ const WorkLogApp = () => {
           
           {/* Input Form */}
           <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8">
-            <h2 className="text-lg font-bold text-slate-800 mb-5 flex items-center gap-2">
-              <Plus className="w-5 h-5 text-emerald-600" />
-              הוספת דיווח חדש
-            </h2>
+            <div className="flex justify-between items-center mb-5">
+              <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <Plus className="w-5 h-5 text-emerald-600" />
+                הוספת דיווח חדש
+              </h2>
+              
+              {/* כפתור הייצוא החדש */}
+              <button 
+                onClick={handleExportToExcel}
+                className="flex items-center gap-2 text-sm text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 px-3 py-1.5 rounded-lg transition-colors border border-emerald-200"
+                title="ייצא נתונים של החודש הנבחר (לפי שדה התאריך)"
+              >
+                <Download className="w-4 h-4" />
+                ייצוא חודשי לאקסל
+              </button>
+            </div>
             
             <form onSubmit={handleAddEntry} className="grid grid-cols-1 md:grid-cols-12 gap-4">
               <div className="md:col-span-5 space-y-1.5">
@@ -119,7 +169,7 @@ const WorkLogApp = () => {
                   <input
                     type="number"
                     step="0.5"
-                    min="0.1"
+                    min="0"  // תוקן: שונה מ-0.1 ל-0 כדי לאפשר מספרים עגולים
                     required
                     placeholder="0.0"
                     value={hours}
