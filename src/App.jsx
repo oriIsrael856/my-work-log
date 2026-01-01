@@ -30,6 +30,7 @@ const WorkLogApp = () => {
   }, []);
 
   // 2. טעינת נתונים (רק אם המשתמש מחובר!)
+  // 2. טעינת נתונים (גרסה מתוקנת - מיון בצד לקוח)
   useEffect(() => {
     if (!user) {
       setEntries([]);
@@ -38,24 +39,24 @@ const WorkLogApp = () => {
 
     setDataLoading(true);
     
-    // שאילתה חכמה: תביא רק נתונים ששייכים למשתמש הנוכחי (user.uid)
+    // שינוי: הסרנו את ה-orderBy מהשאילתה כדי למנוע את הצורך באינדקס
     const q = query(
       collection(db, "workEntries"), 
-      where("uid", "==", user.uid), 
-      orderBy("date", "desc")
+      where("uid", "==", user.uid)
     );
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const entriesData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
-      }));
+      }))
+      // התיקון: אנחנו ממיינים את התוצאות כאן, בקוד JavaScript רגיל
+      .sort((a, b) => new Date(b.date) - new Date(a.date)); 
+
       setEntries(entriesData);
       setDataLoading(false);
     }, (error) => {
       console.error("Error fetching data:", error);
-      // הערה: אם זה נכשל בהתחלה, זה כנראה בגלל שחסר אינדקס ב-Firebase. 
-      // תסתכל ב-Console של הדפדפן, יהיה שם לינק ליצירת האינדקס.
       setDataLoading(false);
     });
 
