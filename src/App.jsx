@@ -1,33 +1,40 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Calendar, Clock, BarChart3, Save, Briefcase, Download } from 'lucide-react';
+import { Plus, Trash2, Calendar, Clock, BarChart3, Save, Briefcase, Download, Loader2 } from 'lucide-react';
+import { db } from './firebase'; // חיבור למסד הנתונים שיצרנו
+import { collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy } from 'firebase/firestore';
+import * as XLSX from 'xlsx'; // ספרייה לייצוא אקסל מקצועי
 
 const WorkLogApp = () => {
-  // State for form inputs
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [hours, setHours] = useState('');
   const [description, setDescription] = useState('');
   
-  // State for stored entries
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Load from local storage on mount
+  // האזנה לשינויים ב-Firebase (במקום LocalStorage)
   useEffect(() => {
-    const savedEntries = localStorage.getItem('workLogEntries');
-    if (savedEntries) {
-      setEntries(JSON.parse(savedEntries));
-    }
-    setLoading(false);
+    // יצירת שאילתה שמביאה את הנתונים מסודרים לפי תאריך יורד
+    const q = query(collection(db, "workEntries"), orderBy("date", "desc"));
+    
+    // הפונקציה הזו רצה כל פעם שיש שינוי במסד הנתונים
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const entriesData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setEntries(entriesData);
+      setLoading(false);
+    }, (error) => {
+      console.error("Error fetching data:", error);
+      alert("שגיאה בטעינת נתונים. וודא שקובץ firebase.js מוגדר נכון");
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  // Save to local storage whenever entries change
-  useEffect(() => {
-    if (!loading) {
-      localStorage.setItem('workLogEntries', JSON.stringify(entries));
-    }
-  }, [entries, loading]);
-
-  const handleAddEntry = (e) => {
+  const handleAddEntry = async (e) => {
     e.preventDefault();
 
     if (!date || !hours || parseFloat(hours) <= 0) {
@@ -35,36 +42,41 @@ const WorkLogApp = () => {
       return;
     }
 
-    const newEntry = {
-      id: Date.now(),
-      date,
-      hours: parseFloat(hours),
-      description: description || 'ללא תיאור'
-    };
+    try {
+      // הוספה למסד הנתונים בענן
+      await addDoc(collection(db, "workEntries"), {
+        date,
+        hours: parseFloat(hours),
+        description: description || 'ללא תיאור',
+        createdAt: new Date() // שדה עזר למיון
+      });
 
-    // Add new entry and sort by date (newest first)
-    const updatedEntries = [...entries, newEntry].sort((a, b) => new Date(b.date) - new Date(a.date));
-    
-    setEntries(updatedEntries);
-    setHours('');
-    setDescription('');
-  };
-
-  const handleDeleteEntry = (id) => {
-    if (window.confirm('האם למחוק רשומה זו?')) {
-      const updatedEntries = entries.filter(entry => entry.id !== id);
-      setEntries(updatedEntries);
+      setHours('');
+      setDescription('');
+    } catch (error) {
+      console.error("Error adding document: ", error);
+      alert("שגיאה בשמירה לענן");
     }
   };
 
-  // --- פונקציית הייצוא החדשה ---
+  const handleDeleteEntry = async (id) => {
+    if (window.confirm('האם למחוק רשומה זו?')) {
+      try {
+        await deleteDoc(doc(db, "workEntries", id));
+      } catch (error) {
+        console.error("Error deleting document: ", error);
+        alert("שגיאה במחיקה");
+      }
+    }
+  };
+
+  // --- ייצוא לאקסל באמצעות ספריית XLSX ---
   const handleExportToExcel = () => {
-    // 1. זיהוי החודש והשנה מהתאריך שנבחר כרגע בטופס
     const selectedDate = new Date(date);
     const targetMonth = selectedDate.getMonth();
     const targetYear = selectedDate.getFullYear();
 
-    // 2. סינון הרשומות לאותו חודש
+    // סינון לפי חודש
     const monthlyEntries = entries.filter(entry => {
       const entryDate = new Date(entry.date);
       return entryDate.getMonth() === targetMonth && entryDate.getFullYear() === targetYear;
@@ -75,25 +87,24 @@ const WorkLogApp = () => {
       return;
     }
 
-    // 3. יצירת תוכן ה-CSV (כולל BOM לתמיכה בעברית באקסל)
-    const csvHeader = "תאריך,שעות,תיאור\n";
-    const csvRows = monthlyEntries.map(e => {
-      // עוטפים את התיאור במרכאות כדי למנוע בעיות עם פסיקים בתוך הטקסט
-      const safeDescription = `"${e.description.replace(/"/g, '""')}"`;
-      return `${e.date},${e.hours},${safeDescription}`;
-    }).join("\n");
+    // הכנת הנתונים לפורמט שאקסל אוהב
+    const dataForExcel = monthlyEntries.map(e => ({
+      "תאריך": e.date,
+      "שעות": e.hours,
+      "תיאור": e.description
+    }));
 
-    const csvContent = "\uFEFF" + csvHeader + csvRows; // ה-\uFEFF חובה לעברית באקסל
+    // יצירת גיליון אקסל
+    const worksheet = XLSX.utils.json_to_sheet(dataForExcel);
+    
+    // התאמת רוחב העמודות (קוסמטיקה)
+    worksheet['!cols'] = [{ wch: 15 }, { wch: 10 }, { wch: 40 }];
 
-    // 4. יצירת קובץ והורדה
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `work_log_${targetYear}_${targetMonth + 1}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "דיווח שעות");
+
+    // הורדת הקובץ
+    XLSX.writeFile(workbook, `work_log_${targetYear}_${targetMonth + 1}.xlsx`);
   };
 
   const totalHours = entries.reduce((sum, entry) => sum + entry.hours, 0);
@@ -108,21 +119,21 @@ const WorkLogApp = () => {
       
       <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-700">
         
-        {/* Header Section */}
+        {/* Header */}
         <header className="bg-emerald-600 text-white p-6 md:p-8 flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold flex items-center gap-3">
               <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
                 <Briefcase className="w-8 h-8" />
               </div>
-              יומן שעות
+              יומן שעות (ענן)
             </h1>
-            <p className="text-emerald-100 mt-2 opacity-90">ניהול זמן חכם ופשוט</p>
+            <p className="text-emerald-100 mt-2 opacity-90">הנתונים מסונכרנים בזמן אמת</p>
           </div>
           
           <div className="text-center bg-white/10 px-6 py-3 rounded-xl backdrop-blur-md border border-emerald-400/30">
             <span className="block text-emerald-100 text-xs font-bold uppercase tracking-wider mb-1">סה״כ שעות</span>
-            <span className="block text-3xl font-bold">{totalHours}</span>
+            <span className="block text-3xl font-bold">{loading ? '-' : totalHours}</span>
           </div>
         </header>
 
@@ -136,14 +147,12 @@ const WorkLogApp = () => {
                 הוספת דיווח חדש
               </h2>
               
-              {/* כפתור הייצוא החדש */}
               <button 
                 onClick={handleExportToExcel}
                 className="flex items-center gap-2 text-sm text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 px-3 py-1.5 rounded-lg transition-colors border border-emerald-200"
-                title="ייצא נתונים של החודש הנבחר (לפי שדה התאריך)"
               >
                 <Download className="w-4 h-4" />
-                ייצוא חודשי לאקסל
+                ייצוא לאקסל (.xlsx)
               </button>
             </div>
             
@@ -169,7 +178,7 @@ const WorkLogApp = () => {
                   <input
                     type="number"
                     step="0.5"
-                    min="0"  // תוקן: שונה מ-0.1 ל-0 כדי לאפשר מספרים עגולים
+                    min="0"
                     required
                     placeholder="0.0"
                     value={hours}
@@ -196,7 +205,7 @@ const WorkLogApp = () => {
                   className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 active:scale-[0.99]"
                 >
                   <Save className="w-5 h-5" />
-                  שמירת דיווח
+                  שמירת דיווח בענן
                 </button>
               </div>
             </form>
@@ -215,7 +224,11 @@ const WorkLogApp = () => {
             </div>
 
             <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1 custom-scrollbar">
-              {entries.length === 0 ? (
+              {loading ? (
+                <div className="flex justify-center py-10">
+                  <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
+                </div>
+              ) : entries.length === 0 ? (
                 <div className="text-center py-10 border-2 border-dashed border-slate-200 rounded-xl">
                   <p className="text-slate-400">אין נתונים להצגה</p>
                 </div>
