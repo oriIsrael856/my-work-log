@@ -158,9 +158,10 @@ const WorkLogApp = () => {
             <p className="text-slate-500 mt-2">ניהול שעות עבודה בענן</p>
           </div>
 
-  <form onSubmit={handleAddEntry} className="grid grid-cols-1 md:grid-cols-12 gap-4">
-    {/* שדה תאריך - בטלפון רוחב מלא, במחשב 5 עמודות */}
-    <div className="md:col-span-5 relative">
+    <form onSubmit={handleAddEntry} className="flex flex-col md:grid md:grid-cols-12 gap-4">
+    
+    {/* שדה תאריך - בטלפון: רוחב מלא. במחשב: 5 עמודות */}
+    <div className="w-full md:col-span-5 relative">
       <label htmlFor="date-input" className="sr-only">תאריך</label>
       <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 pointer-events-none" aria-hidden="true" />
       <input 
@@ -169,13 +170,15 @@ const WorkLogApp = () => {
         required 
         value={date} 
         onChange={(e) => setDate(e.target.value)} 
-        className="w-full bg-white border border-slate-300 rounded-lg py-3 pr-10 pl-4 focus:ring-2 focus:ring-emerald-500 outline-none appearance-none min-h-[48px]"
+        className="w-full bg-white border border-slate-300 rounded-lg py-3 pr-10 pl-4 focus:ring-2 focus:ring-emerald-500 outline-none appearance-none min-h-[50px] text-base"
+        style={{ WebkitAppearance: 'none' }} // תוספת לאייפון
       />
     </div>
 
-    {/* שדה שעות - בטלפון רוחב מלא, במחשב 3 עמודות */}
-    <div className="md:col-span-3 relative">
+    {/* שדה שעות - בטלפון: רוחב מלא. במחשב: 3 עמודות */}
+    <div className="w-full md:col-span-3 relative">
       <label htmlFor="hours-input" className="sr-only">שעות</label>
+      <Clock className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 pointer-events-none md:hidden" /> {/* אייקון שעות שמופיע רק בנייד ליופי */}
       <input 
         id="hours-input"
         type="number" 
@@ -185,12 +188,12 @@ const WorkLogApp = () => {
         placeholder="שעות" 
         value={hours} 
         onChange={(e) => setHours(e.target.value)} 
-        className="w-full bg-white border border-slate-300 rounded-lg py-3 px-4 focus:ring-2 focus:ring-emerald-500 outline-none min-h-[48px]" 
+        className="w-full bg-white border border-slate-300 rounded-lg py-3 px-4 focus:ring-2 focus:ring-emerald-500 outline-none min-h-[50px] text-base" 
       />
     </div>
 
-    {/* שדה תיאור - בטלפון רוחב מלא, במחשב 4 עמודות */}
-    <div className="md:col-span-4">
+    {/* שדה תיאור - בטלפון: רוחב מלא. במחשב: 4 עמודות */}
+    <div className="w-full md:col-span-4">
       <label htmlFor="desc-input" className="sr-only">תיאור</label>
       <input 
         id="desc-input"
@@ -198,15 +201,15 @@ const WorkLogApp = () => {
         placeholder="תיאור (מה עשית?)" 
         value={description} 
         onChange={(e) => setDescription(e.target.value)} 
-        className="w-full bg-white border border-slate-300 rounded-lg py-3 px-4 focus:ring-2 focus:ring-emerald-500 outline-none min-h-[48px]" 
+        className="w-full bg-white border border-slate-300 rounded-lg py-3 px-4 focus:ring-2 focus:ring-emerald-500 outline-none min-h-[50px] text-base" 
       />
     </div>
 
-    {/* כפתור שמירה - תמיד רוחב מלא */}
-    <div className="md:col-span-12 mt-2">
+    {/* כפתור שמירה */}
+    <div className="w-full md:col-span-12 mt-2">
       <button 
         type="submit" 
-        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg shadow transition-all flex justify-center gap-2 items-center min-h-[48px]"
+        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg shadow transition-all flex justify-center gap-2 items-center min-h-[50px]"
       >
         <Save className="w-5 h-5" aria-hidden="true" /> שמירה
       </button>
