@@ -92,8 +92,6 @@ const WorkLogApp = () => {
       });
       setHours('');
       setDescription('');
-      
-      // הודעה לקוראי מסך על הצלחה (אופציונלי - ניתן להוסיף רכיב Live Region בעתיד)
     } catch (error) {
       alert("שגיאה בשמירה");
     }
@@ -133,6 +131,8 @@ const WorkLogApp = () => {
   };
 
   const totalHours = entries.reduce((sum, entry) => sum + entry.hours, 0);
+  
+  // פונקציה לעיצוב תאריך מלא (למחשב)
   const formatDate = (d) => new Date(d).toLocaleDateString('he-IL', { weekday: 'long', day: '2-digit', month: '2-digit' });
 
   // --- מסך טעינה נגיש ---
@@ -158,63 +158,45 @@ const WorkLogApp = () => {
             <p className="text-slate-500 mt-2">ניהול שעות עבודה בענן</p>
           </div>
 
-    <form onSubmit={handleAddEntry} className="flex flex-col md:grid md:grid-cols-12 gap-4">
-    
-    {/* שדה תאריך - בטלפון: רוחב מלא. במחשב: 5 עמודות */}
-    <div className="w-full md:col-span-5 relative">
-      <label htmlFor="date-input" className="sr-only">תאריך</label>
-      <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 pointer-events-none" aria-hidden="true" />
-      <input 
-        id="date-input"
-        type="date" 
-        required 
-        value={date} 
-        onChange={(e) => setDate(e.target.value)} 
-        className="w-full bg-white border border-slate-300 rounded-lg py-3 pr-10 pl-4 focus:ring-2 focus:ring-emerald-500 outline-none appearance-none min-h-[50px] text-base"
-        style={{ WebkitAppearance: 'none' }} // תוספת לאייפון
-      />
-    </div>
-
-    {/* שדה שעות - בטלפון: רוחב מלא. במחשב: 3 עמודות */}
-    <div className="w-full md:col-span-3 relative">
-      <label htmlFor="hours-input" className="sr-only">שעות</label>
-      <Clock className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 pointer-events-none md:hidden" /> {/* אייקון שעות שמופיע רק בנייד ליופי */}
-      <input 
-        id="hours-input"
-        type="number" 
-        step="0.5" 
-        min="0" 
-        required 
-        placeholder="שעות" 
-        value={hours} 
-        onChange={(e) => setHours(e.target.value)} 
-        className="w-full bg-white border border-slate-300 rounded-lg py-3 px-4 focus:ring-2 focus:ring-emerald-500 outline-none min-h-[50px] text-base" 
-      />
-    </div>
-
-    {/* שדה תיאור - בטלפון: רוחב מלא. במחשב: 4 עמודות */}
-    <div className="w-full md:col-span-4">
-      <label htmlFor="desc-input" className="sr-only">תיאור</label>
-      <input 
-        id="desc-input"
-        type="text" 
-        placeholder="תיאור (מה עשית?)" 
-        value={description} 
-        onChange={(e) => setDescription(e.target.value)} 
-        className="w-full bg-white border border-slate-300 rounded-lg py-3 px-4 focus:ring-2 focus:ring-emerald-500 outline-none min-h-[50px] text-base" 
-      />
-    </div>
-
-    {/* כפתור שמירה */}
-    <div className="w-full md:col-span-12 mt-2">
-      <button 
-        type="submit" 
-        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg shadow transition-all flex justify-center gap-2 items-center min-h-[50px]"
-      >
-        <Save className="w-5 h-5" aria-hidden="true" /> שמירה
-      </button>
-    </div>
-  </form>
+          <form onSubmit={handleAuth} className="space-y-4">
+            <div className="space-y-1">
+              <label htmlFor="email" className="text-sm font-medium text-slate-700">אימייל</label>
+              <div className="relative">
+                <Mail className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" aria-hidden="true" />
+                <input 
+                  id="email"
+                  type="email" 
+                  required 
+                  className="w-full pr-10 pl-4 py-3 bg-slate-50 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 outline-none"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@example.com"
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="password" className="text-sm font-medium text-slate-700">סיסמה</label>
+              <div className="relative">
+                <Lock className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" aria-hidden="true" />
+                <input 
+                  id="password"
+                  type="password" 
+                  required 
+                  minLength="6"
+                  className="w-full pr-10 pl-4 py-3 bg-slate-50 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 outline-none"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="******"
+                />
+              </div>
+            </div>
+            <button 
+              type="submit" 
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg transition-colors focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 outline-none"
+            >
+              {isLoginView ? 'התחבר' : 'הירשם'}
+            </button>
+          </form>
 
           <div className="mt-6 text-center">
             <button 
@@ -278,20 +260,26 @@ const WorkLogApp = () => {
               </button>
             </div>
             
-            <form onSubmit={handleAddEntry} className="grid grid-cols-12 gap-3">
-              <div className="col-span-5">
+            {/* הטופס עם התיקון לנייד: Flex Column בברירת מחדל */}
+            <form onSubmit={handleAddEntry} className="flex flex-col md:grid md:grid-cols-12 gap-4">
+              
+              <div className="w-full md:col-span-5 relative">
                 <label htmlFor="date-input" className="sr-only">תאריך</label>
+                <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 pointer-events-none" aria-hidden="true" />
                 <input 
                   id="date-input"
                   type="date" 
                   required 
                   value={date} 
                   onChange={(e) => setDate(e.target.value)} 
-                  className="w-full p-2 border rounded focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 outline-none" 
+                  className="w-full bg-white border border-slate-300 rounded-lg py-3 pr-10 pl-4 focus:ring-2 focus:ring-emerald-500 outline-none appearance-none min-h-[50px] text-base"
+                  style={{ WebkitAppearance: 'none' }} 
                 />
               </div>
-              <div className="col-span-3">
+
+              <div className="w-full md:col-span-3 relative">
                 <label htmlFor="hours-input" className="sr-only">שעות</label>
+                <Clock className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 pointer-events-none md:hidden" />
                 <input 
                   id="hours-input"
                   type="number" 
@@ -301,26 +289,28 @@ const WorkLogApp = () => {
                   placeholder="שעות" 
                   value={hours} 
                   onChange={(e) => setHours(e.target.value)} 
-                  className="w-full p-2 border rounded focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 outline-none" 
+                  className="w-full bg-white border border-slate-300 rounded-lg py-3 px-4 focus:ring-2 focus:ring-emerald-500 outline-none min-h-[50px] text-base" 
                 />
               </div>
-              <div className="col-span-4">
+
+              <div className="w-full md:col-span-4">
                 <label htmlFor="desc-input" className="sr-only">תיאור</label>
                 <input 
                   id="desc-input"
                   type="text" 
-                  placeholder="תיאור" 
+                  placeholder="תיאור (מה עשית?)" 
                   value={description} 
                   onChange={(e) => setDescription(e.target.value)} 
-                  className="w-full p-2 border rounded focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 outline-none" 
+                  className="w-full bg-white border border-slate-300 rounded-lg py-3 px-4 focus:ring-2 focus:ring-emerald-500 outline-none min-h-[50px] text-base" 
                 />
               </div>
-              <div className="col-span-12">
+
+              <div className="w-full md:col-span-12 mt-2">
                 <button 
                   type="submit" 
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded shadow transition-all flex justify-center gap-2 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 outline-none"
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg shadow transition-all flex justify-center gap-2 items-center min-h-[50px]"
                 >
-                  <Save className="w-4 h-4" aria-hidden="true" /> שמירה
+                  <Save className="w-5 h-5" aria-hidden="true" /> שמירה
                 </button>
               </div>
             </form>
@@ -344,17 +334,25 @@ const WorkLogApp = () => {
                 entries.map((entry) => (
                   <div key={entry.id} className="bg-white p-3 rounded border flex justify-between items-center hover:shadow-sm" role="listitem">
                     <div className="flex items-center gap-3">
-                      <div className="bg-emerald-50 text-emerald-700 font-bold w-10 h-10 rounded flex items-center justify-center" aria-label={`${entry.hours} שעות`}>
+                      <div className="bg-emerald-50 text-emerald-700 font-bold w-10 h-10 rounded flex items-center justify-center shrink-0" aria-label={`${entry.hours} שעות`}>
                         {entry.hours}
                       </div>
-                      <div>
-                        <div className="font-bold text-slate-700 text-sm">{formatDate(entry.date)}</div>
-                        <div className="text-slate-500 text-xs">{entry.description}</div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-slate-700 text-sm">
+                          {/* תיקון: הצגת תאריך קצר בנייד ותאריך ארוך במחשב */}
+                          <span className="md:hidden">
+                            {new Date(entry.date).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' })}
+                          </span>
+                          <span className="hidden md:inline">
+                            {formatDate(entry.date)}
+                          </span>
+                        </div>
+                        <div className="text-slate-500 text-xs truncate max-w-[150px] md:max-w-none">{entry.description}</div>
                       </div>
                     </div>
                     <button 
                       onClick={() => handleDeleteEntry(entry.id)} 
-                      className="text-slate-300 hover:text-red-500 p-1 rounded hover:bg-red-50 focus:ring-2 focus:ring-red-500 outline-none transition-colors"
+                      className="text-slate-300 hover:text-red-500 p-1 rounded hover:bg-red-50 focus:ring-2 focus:ring-red-500 outline-none transition-colors shrink-0"
                       aria-label={`מחק רשומה מתאריך ${formatDate(entry.date)}`}
                       title="מחיקה"
                     >
