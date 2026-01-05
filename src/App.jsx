@@ -158,45 +158,60 @@ const WorkLogApp = () => {
             <p className="text-slate-500 mt-2">ניהול שעות עבודה בענן</p>
           </div>
 
-          <form onSubmit={handleAuth} className="space-y-4">
-            <div className="space-y-1">
-              <label htmlFor="email" className="text-sm font-medium text-slate-700">אימייל</label>
-              <div className="relative">
-                <Mail className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" aria-hidden="true" />
-                <input 
-                  id="email"
-                  type="email" 
-                  required 
-                  className="w-full pr-10 pl-4 py-3 bg-slate-50 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 outline-none"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@example.com"
-                />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <label htmlFor="password" className="text-sm font-medium text-slate-700">סיסמה</label>
-              <div className="relative">
-                <Lock className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" aria-hidden="true" />
-                <input 
-                  id="password"
-                  type="password" 
-                  required 
-                  minLength="6"
-                  className="w-full pr-10 pl-4 py-3 bg-slate-50 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 outline-none"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="******"
-                />
-              </div>
-            </div>
-            <button 
-              type="submit" 
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg transition-colors focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 outline-none"
-            >
-              {isLoginView ? 'התחבר' : 'הירשם'}
-            </button>
-          </form>
+  <form onSubmit={handleAddEntry} className="grid grid-cols-1 md:grid-cols-12 gap-4">
+    {/* שדה תאריך - בטלפון רוחב מלא, במחשב 5 עמודות */}
+    <div className="md:col-span-5 relative">
+      <label htmlFor="date-input" className="sr-only">תאריך</label>
+      <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 pointer-events-none" aria-hidden="true" />
+      <input 
+        id="date-input"
+        type="date" 
+        required 
+        value={date} 
+        onChange={(e) => setDate(e.target.value)} 
+        className="w-full bg-white border border-slate-300 rounded-lg py-3 pr-10 pl-4 focus:ring-2 focus:ring-emerald-500 outline-none appearance-none min-h-[48px]"
+      />
+    </div>
+
+    {/* שדה שעות - בטלפון רוחב מלא, במחשב 3 עמודות */}
+    <div className="md:col-span-3 relative">
+      <label htmlFor="hours-input" className="sr-only">שעות</label>
+      <input 
+        id="hours-input"
+        type="number" 
+        step="0.5" 
+        min="0" 
+        required 
+        placeholder="שעות" 
+        value={hours} 
+        onChange={(e) => setHours(e.target.value)} 
+        className="w-full bg-white border border-slate-300 rounded-lg py-3 px-4 focus:ring-2 focus:ring-emerald-500 outline-none min-h-[48px]" 
+      />
+    </div>
+
+    {/* שדה תיאור - בטלפון רוחב מלא, במחשב 4 עמודות */}
+    <div className="md:col-span-4">
+      <label htmlFor="desc-input" className="sr-only">תיאור</label>
+      <input 
+        id="desc-input"
+        type="text" 
+        placeholder="תיאור (מה עשית?)" 
+        value={description} 
+        onChange={(e) => setDescription(e.target.value)} 
+        className="w-full bg-white border border-slate-300 rounded-lg py-3 px-4 focus:ring-2 focus:ring-emerald-500 outline-none min-h-[48px]" 
+      />
+    </div>
+
+    {/* כפתור שמירה - תמיד רוחב מלא */}
+    <div className="md:col-span-12 mt-2">
+      <button 
+        type="submit" 
+        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg shadow transition-all flex justify-center gap-2 items-center min-h-[48px]"
+      >
+        <Save className="w-5 h-5" aria-hidden="true" /> שמירה
+      </button>
+    </div>
+  </form>
 
           <div className="mt-6 text-center">
             <button 
