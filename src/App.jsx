@@ -36,7 +36,6 @@ const WorkLogApp = () => {
 
     setDataLoading(true);
     
-    // שאילתה ללא מיון כדי למנוע שגיאת אינדקס בהתחלה
     const q = query(
       collection(db, "workEntries"), 
       where("uid", "==", user.uid)
@@ -47,7 +46,6 @@ const WorkLogApp = () => {
         id: doc.id,
         ...doc.data()
       }))
-      // מיון בצד לקוח (JavaScript)
       .sort((a, b) => new Date(b.date) - new Date(a.date)); 
 
       setEntries(entriesData);
@@ -132,27 +130,24 @@ const WorkLogApp = () => {
 
   const totalHours = entries.reduce((sum, entry) => sum + entry.hours, 0);
   
-  // פונקציה לעיצוב תאריך מלא (למחשב)
+  // פונקציה לתאריך מלא
   const formatDate = (d) => new Date(d).toLocaleDateString('he-IL', { weekday: 'long', day: '2-digit', month: '2-digit' });
 
-  // --- מסך טעינה נגיש ---
   if (authLoading) return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white" role="status" aria-label="טוען נתונים">
-      <Loader2 className="animate-spin w-10 h-10" aria-hidden="true" />
-      <span className="sr-only">טוען...</span>
+    <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
+      <Loader2 className="animate-spin w-10 h-10" />
     </div>
   );
 
-  // --- מסך התחברות נגיש ---
   if (!user) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-slate-900 p-4 font-sans" dir="rtl">
         <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8">
           <div className="text-center mb-8">
-            <div className="bg-emerald-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" aria-hidden="true">
+            <div className="bg-emerald-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
               <User className="w-8 h-8 text-emerald-600" />
             </div>
-            <h1 className="text-2xl font-bold text-slate-800" tabIndex="-1">
+            <h1 className="text-2xl font-bold text-slate-800">
               {isLoginView ? 'התחברות למערכת' : 'הרשמה חדשה'}
             </h1>
             <p className="text-slate-500 mt-2">ניהול שעות עבודה בענן</p>
@@ -160,49 +155,34 @@ const WorkLogApp = () => {
 
           <form onSubmit={handleAuth} className="space-y-4">
             <div className="space-y-1">
-              <label htmlFor="email" className="text-sm font-medium text-slate-700">אימייל</label>
+              <label className="text-sm font-medium text-slate-700">אימייל</label>
               <div className="relative">
-                <Mail className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" aria-hidden="true" />
+                <Mail className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                 <input 
-                  id="email"
-                  type="email" 
-                  required 
-                  className="w-full pr-10 pl-4 py-3 bg-slate-50 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 outline-none"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@example.com"
+                  type="email" required 
+                  className="w-full pr-10 pl-4 py-3 bg-slate-50 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                  value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com"
                 />
               </div>
             </div>
             <div className="space-y-1">
-              <label htmlFor="password" className="text-sm font-medium text-slate-700">סיסמה</label>
+              <label className="text-sm font-medium text-slate-700">סיסמה</label>
               <div className="relative">
-                <Lock className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" aria-hidden="true" />
+                <Lock className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                 <input 
-                  id="password"
-                  type="password" 
-                  required 
-                  minLength="6"
-                  className="w-full pr-10 pl-4 py-3 bg-slate-50 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 outline-none"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="******"
+                  type="password" required minLength="6"
+                  className="w-full pr-10 pl-4 py-3 bg-slate-50 border rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                  value={password} onChange={(e) => setPassword(e.target.value)} placeholder="******"
                 />
               </div>
             </div>
-            <button 
-              type="submit" 
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg transition-colors focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 outline-none"
-            >
+            <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg transition-colors">
               {isLoginView ? 'התחבר' : 'הירשם'}
             </button>
           </form>
 
           <div className="mt-6 text-center">
-            <button 
-              onClick={() => setIsLoginView(!isLoginView)}
-              className="text-emerald-600 hover:underline text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 rounded px-2"
-            >
+            <button onClick={() => setIsLoginView(!isLoginView)} className="text-emerald-600 hover:underline text-sm font-medium">
               {isLoginView ? 'אין לך חשבון? הירשם כאן' : 'יש לך חשבון? התחבר כאן'}
             </button>
           </div>
@@ -211,7 +191,6 @@ const WorkLogApp = () => {
     );
   }
 
-  // --- מסך אפליקציה נגיש ---
   return (
     <main className="min-h-screen w-full flex items-center justify-center bg-slate-900 p-4 md:p-8 font-sans" dir="rtl">
       <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-700">
@@ -220,143 +199,103 @@ const WorkLogApp = () => {
         <header className="bg-emerald-600 text-white p-6 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Briefcase className="w-6 h-6" aria-hidden="true" />
+              <Briefcase className="w-6 h-6" />
               יומן שעות
             </h1>
-            <p className="text-emerald-100 text-sm opacity-90 mt-1">
-              מחובר בתור: <span className="font-semibold">{user.email}</span>
-            </p>
+            <p className="text-emerald-100 text-sm opacity-90 mt-1">מחובר בתור: {user.email}</p>
           </div>
           <div className="flex items-center gap-3">
-             <div className="bg-white/10 px-4 py-2 rounded-lg backdrop-blur-md" role="status" aria-label={`סה"כ שעות: ${totalHours}`}>
-                <span className="block text-xl font-bold text-center" aria-hidden="true">{totalHours}</span>
-                <span className="text-[10px] uppercase opacity-80" aria-hidden="true">סה״כ</span>
+             <div className="bg-white/10 px-4 py-2 rounded-lg backdrop-blur-md">
+                <span className="block text-xl font-bold text-center">{totalHours}</span>
+                <span className="text-[10px] uppercase opacity-80">סה״כ</span>
              </div>
-             <button 
-                onClick={handleLogout} 
-                className="bg-emerald-800/50 p-2 rounded-lg hover:bg-emerald-800 transition-colors focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-emerald-600 outline-none" 
-                aria-label="התנתק מהמערכת"
-                title="התנתק"
-             >
-               <LogOut className="w-5 h-5" aria-hidden="true" />
+             <button onClick={handleLogout} className="bg-emerald-800/50 p-2 rounded-lg hover:bg-emerald-800 transition-colors">
+               <LogOut className="w-5 h-5" />
              </button>
           </div>
         </header>
 
         <div className="p-6 bg-slate-50">
-          {/* Input Form Section */}
-          <section className="bg-white rounded-xl shadow-sm border p-6 mb-6" aria-labelledby="new-entry-title">
+          
+          <section className="bg-white rounded-xl shadow-sm border p-6 mb-6">
             <div className="flex justify-between items-center mb-4">
-              <h2 id="new-entry-title" className="font-bold text-slate-800 flex items-center gap-2">
-                <Plus className="w-5 h-5 text-emerald-600" aria-hidden="true"/> 
-                דיווח חדש
+              <h2 className="font-bold text-slate-800 flex items-center gap-2">
+                <Plus className="w-5 h-5 text-emerald-600"/> דיווח חדש
               </h2>
-              <button 
-                onClick={handleExportToExcel} 
-                className="flex items-center gap-1 text-xs text-emerald-600 border border-emerald-200 px-2 py-1 rounded hover:bg-emerald-50 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 outline-none"
-                aria-label="ייצא נתונים לקובץ אקסל"
-              >
-                <Download className="w-3 h-3" aria-hidden="true" /> אקסל
+              <button onClick={handleExportToExcel} className="flex items-center gap-1 text-xs text-emerald-600 border border-emerald-200 px-2 py-1 rounded hover:bg-emerald-50">
+                <Download className="w-3 h-3" /> אקסל
               </button>
             </div>
             
-            {/* הטופס עם התיקון לנייד: Flex Column בברירת מחדל */}
             <form onSubmit={handleAddEntry} className="flex flex-col md:grid md:grid-cols-12 gap-4">
-              
               <div className="w-full md:col-span-5 relative">
-                <label htmlFor="date-input" className="sr-only">תאריך</label>
-                <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 pointer-events-none" aria-hidden="true" />
+                <label className="sr-only">תאריך</label>
+                <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 pointer-events-none" />
                 <input 
-                  id="date-input"
-                  type="date" 
-                  required 
-                  value={date} 
-                  onChange={(e) => setDate(e.target.value)} 
+                  type="date" required value={date} onChange={(e) => setDate(e.target.value)} 
                   className="w-full bg-white border border-slate-300 rounded-lg py-3 pr-10 pl-4 focus:ring-2 focus:ring-emerald-500 outline-none appearance-none min-h-[50px] text-base"
                   style={{ WebkitAppearance: 'none' }} 
                 />
               </div>
 
+              {/* תיקון: הוספתי pr-10 כדי שהאייקון לא יעלה על הטקסט */}
               <div className="w-full md:col-span-3 relative">
-                <label htmlFor="hours-input" className="sr-only">שעות</label>
+                <label className="sr-only">שעות</label>
                 <Clock className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 pointer-events-none md:hidden" />
                 <input 
-                  id="hours-input"
-                  type="number" 
-                  step="0.5" 
-                  min="0" 
-                  required 
-                  placeholder="שעות" 
-                  value={hours} 
-                  onChange={(e) => setHours(e.target.value)} 
-                  className="w-full bg-white border border-slate-300 rounded-lg py-3 px-4 focus:ring-2 focus:ring-emerald-500 outline-none min-h-[50px] text-base" 
+                  type="number" step="0.5" min="0" required placeholder="שעות" 
+                  value={hours} onChange={(e) => setHours(e.target.value)} 
+                  className="w-full bg-white border border-slate-300 rounded-lg py-3 pr-10 pl-4 md:pr-4 focus:ring-2 focus:ring-emerald-500 outline-none min-h-[50px] text-base" 
                 />
               </div>
 
               <div className="w-full md:col-span-4">
-                <label htmlFor="desc-input" className="sr-only">תיאור</label>
+                <label className="sr-only">תיאור</label>
                 <input 
-                  id="desc-input"
-                  type="text" 
-                  placeholder="תיאור (מה עשית?)" 
-                  value={description} 
-                  onChange={(e) => setDescription(e.target.value)} 
+                  type="text" placeholder="תיאור (מה עשית?)" 
+                  value={description} onChange={(e) => setDescription(e.target.value)} 
                   className="w-full bg-white border border-slate-300 rounded-lg py-3 px-4 focus:ring-2 focus:ring-emerald-500 outline-none min-h-[50px] text-base" 
                 />
               </div>
 
               <div className="w-full md:col-span-12 mt-2">
-                <button 
-                  type="submit" 
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg shadow transition-all flex justify-center gap-2 items-center min-h-[50px]"
-                >
-                  <Save className="w-5 h-5" aria-hidden="true" /> שמירה
+                <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg shadow transition-all flex justify-center gap-2 items-center min-h-[50px]">
+                  <Save className="w-5 h-5" /> שמירה
                 </button>
               </div>
             </form>
           </section>
 
-          {/* List Section */}
-          <section aria-labelledby="history-title">
-             <h2 id="history-title" className="font-bold text-slate-700 mb-2 flex justify-between">
+          <section>
+             <h2 className="font-bold text-slate-700 mb-2 flex justify-between">
                <span>היסטוריה</span>
-               <span className="bg-slate-200 text-slate-600 text-xs px-2 py-1 rounded-full" aria-label={`${entries.length} רשומות`}>{entries.length}</span>
+               <span className="bg-slate-200 text-slate-600 text-xs px-2 py-1 rounded-full">{entries.length}</span>
              </h2>
-             <div className="space-y-2 max-h-[350px] overflow-y-auto pl-1 custom-scrollbar" role="list">
+             <div className="space-y-2 max-h-[350px] overflow-y-auto pl-1 custom-scrollbar">
                {dataLoading ? (
-                  <div className="text-center py-4" role="status">
-                    <Loader2 className="animate-spin w-6 h-6 mx-auto text-emerald-600" aria-hidden="true"/>
-                    <span className="sr-only">טוען נתונים...</span>
-                  </div>
+                  <div className="text-center py-4"><Loader2 className="animate-spin w-6 h-6 mx-auto text-emerald-600"/></div>
                ) : entries.length === 0 ? (
                   <p className="text-center text-slate-400 py-4 text-sm">אין נתונים להצגה</p>
                ) : (
                 entries.map((entry) => (
-                  <div key={entry.id} className="bg-white p-3 rounded border flex justify-between items-center hover:shadow-sm" role="listitem">
-                    <div className="flex items-center gap-3">
-                      <div className="bg-emerald-50 text-emerald-700 font-bold w-10 h-10 rounded flex items-center justify-center shrink-0" aria-label={`${entry.hours} שעות`}>
+                  <div key={entry.id} className="bg-white p-3 rounded border flex justify-between items-center hover:shadow-sm">
+                    <div className="flex items-center gap-3 overflow-hidden">
+                      <div className="bg-emerald-50 text-emerald-700 font-bold w-10 h-10 rounded flex items-center justify-center shrink-0">
                         {entry.hours}
                       </div>
-                      <div className="min-w-0">
-                        <div className="font-bold text-slate-700 text-sm">
-                          {/* תיקון: הצגת תאריך קצר בנייד ותאריך ארוך במחשב */}
-                          <span className="md:hidden">
-                            {new Date(entry.date).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' })}
-                          </span>
-                          <span className="hidden md:inline">
+                      <div className="min-w-0 flex-1">
+                        {/* כאן החזרנו את הפורמט המלא (יום + תאריך) */}
+                        <div className="font-bold text-slate-700 text-sm truncate">
                             {formatDate(entry.date)}
-                          </span>
                         </div>
-                        <div className="text-slate-500 text-xs truncate max-w-[150px] md:max-w-none">{entry.description}</div>
+                        <div className="text-slate-500 text-xs truncate max-w-[200px]">{entry.description}</div>
                       </div>
                     </div>
                     <button 
                       onClick={() => handleDeleteEntry(entry.id)} 
-                      className="text-slate-300 hover:text-red-500 p-1 rounded hover:bg-red-50 focus:ring-2 focus:ring-red-500 outline-none transition-colors shrink-0"
-                      aria-label={`מחק רשומה מתאריך ${formatDate(entry.date)}`}
-                      title="מחיקה"
+                      className="text-slate-300 hover:text-red-500 p-1 rounded hover:bg-red-50 transition-colors shrink-0 ml-2"
                     >
-                      <Trash2 className="w-4 h-4" aria-hidden="true" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 ))
