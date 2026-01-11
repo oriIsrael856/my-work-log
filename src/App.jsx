@@ -23,10 +23,10 @@ const WorkLogApp = () => {
   const [newJobName, setNewJobName] = useState('');
   const [isCreatingJob, setIsCreatingJob] = useState(false);
 
-  // --- Job Settings State (New!) ---
-  const [hourlyRate, setHourlyRate] = useState(0); // תעריף שעתי
-  const [taxDeduction, setTaxDeduction] = useState(0); // אחוז הורדה לנטו (מס+ביטוח לאומי וכו)
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false); // פתיחת תפריט הגדרות שכר
+  // --- Job Settings State (Separate per job) ---
+  const [hourlyRate, setHourlyRate] = useState(0); 
+  const [taxDeduction, setTaxDeduction] = useState(0); 
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // --- Form State ---
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -70,7 +70,7 @@ const WorkLogApp = () => {
     return () => unsubscribe();
   }, [user]);
 
-  // 3. Job List Calculation
+  // 3. Job List Logic
   const jobList = useMemo(() => {
     const jobs = new Set(['עבודה 1']);
     entries.forEach(entry => { if (entry.job) jobs.add(entry.job); });
@@ -83,13 +83,18 @@ const WorkLogApp = () => {
     }
   }, [jobList, currentJob]);
 
-  // 4. Load Job Settings (Rate & Tax) when switching jobs
+  // 4. Load Job Settings (Rate & Tax) - הפרדה מלאה בין עבודות
   useEffect(() => {
     const loadSettings = async () => {
       if (!user || !currentJob) return;
       
-      // מסמך ייחודי לכל שילוב של משתמש+עבודה
-      const settingsId = `${user.uid}_${currentJob.replace(/\s+/g, '_')}_settings`;
+      // איפוס זמני כדי שלא נראה את הנתונים של העבודה הקודמת
+      setHourlyRate(0);
+      setTaxDeduction(0);
+
+      // יצירת מזהה ייחודי שכולל גם את שם המשתמש וגם את שם העבודה
+      // שימוש ב-encodeURIComponent מבטיח ששמות עבודה עם רווחים יעבדו תקין
+      const settingsId = `${user.uid}_${encodeURIComponent(currentJob)}_settings`;
       const docRef = doc(db, "jobSettings", settingsId);
       
       try {
@@ -97,10 +102,6 @@ const WorkLogApp = () => {
         if (docSnap.exists()) {
           setHourlyRate(docSnap.data().hourlyRate || 0);
           setTaxDeduction(docSnap.data().taxDeduction || 0);
-        } else {
-          // ברירת מחדל אם אין הגדרות
-          setHourlyRate(0);
-          setTaxDeduction(0);
         }
       } catch (error) {
         console.error("Error loading settings:", error);
@@ -108,14 +109,15 @@ const WorkLogApp = () => {
     };
 
     loadSettings();
-  }, [user, currentJob]);
+  }, [user, currentJob]); // רץ בכל פעם שמשתנה העבודה הנוכחית
 
   // --- Handlers ---
 
-  // שמירת הגדרות שכר למסד הנתונים
   const saveJobSettings = async (newRate, newTax) => {
     if (!user || !currentJob) return;
-    const settingsId = `${user.uid}_${currentJob.replace(/\s+/g, '_')}_settings`;
+    
+    // אותו מזהה ייחודי כמו בקריאה
+    const settingsId = `${user.uid}_${encodeURIComponent(currentJob)}_settings`;
     
     try {
       await setDoc(doc(db, "jobSettings", settingsId), {
@@ -123,7 +125,7 @@ const WorkLogApp = () => {
         taxDeduction: Number(newTax),
         uid: user.uid,
         job: currentJob
-      });
+      }, { merge: true }); // merge מבטיח שלא נדרוס שדות אחרים אם יהיו בעתיד
     } catch (error) {
       console.error("Error saving settings:", error);
     }
@@ -138,7 +140,6 @@ const WorkLogApp = () => {
         await createUserWithEmailAndPassword(auth, email, password);
       }
     } catch (error) {
-      console.error(error);
       alert("שגיאה בהתחברות/הרשמה.");
     }
   };
@@ -204,12 +205,13 @@ const WorkLogApp = () => {
     const dataForExcel = monthlyEntries.map(e => ({
       "תאריך": e.date,
       "שעות": e.hours,
-      "שכר מוערך": (e.hours * hourlyRate).toFixed(2), // הוספנו עמודת שכר
+      "תעריף שעתי": hourlyRate,
+      "שכר מוערך": (e.hours * hourlyRate).toFixed(2),
       "תיאור": e.description
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(dataForExcel);
-    worksheet['!cols'] = [{ wch: 15 }, { wch: 10 }, { wch: 15 }, { wch: 40 }];
+    worksheet['!cols'] = [{ wch: 15 }, { wch: 10 }, { wch: 15 }, { wch: 15 }, { wch: 40 }];
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, currentJob);
     XLSX.writeFile(workbook, `${currentJob}_${targetYear}_${targetMonth + 1}.xlsx`);
@@ -302,40 +304,45 @@ const WorkLogApp = () => {
 
             {/* Settings Inputs */}
             {isSettingsOpen && (
-              <div className="mt-3 bg-emerald-700/40 p-3 rounded-lg flex flex-col md:flex-row gap-3 animate-in fade-in slide-in-from-top-1">
-                <div className="flex-1">
-                  <label className="text-xs text-emerald-100 block mb-1">תעריף לשעה (₪)</label>
-                  <div className="relative">
-                    <Coins className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-200" />
-                    <input 
-                      type="number" 
-                      min="0"
-                      value={hourlyRate}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setHourlyRate(val);
-                        saveJobSettings(val, taxDeduction);
-                      }}
-                      className="w-full bg-emerald-800/50 border border-emerald-600 rounded px-2 py-1.5 pr-8 text-white text-sm outline-none focus:border-emerald-400"
-                    />
-                  </div>
+              <div className="mt-3 bg-emerald-700/40 p-4 rounded-lg animate-in fade-in slide-in-from-top-1 border border-emerald-500/30">
+                <div className="text-xs text-emerald-200 font-bold mb-3 border-b border-emerald-600/50 pb-1">
+                  הגדרות עבור: {currentJob}
                 </div>
-                <div className="flex-1">
-                  <label className="text-xs text-emerald-100 block mb-1">ניכוי משוער לנטו (%)</label>
-                  <div className="relative">
-                    <Percent className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-200" />
-                    <input 
-                      type="number" 
-                      min="0" max="100"
-                      value={taxDeduction}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setTaxDeduction(val);
-                        saveJobSettings(hourlyRate, val);
-                      }}
-                      className="w-full bg-emerald-800/50 border border-emerald-600 rounded px-2 py-1.5 pr-8 text-white text-sm outline-none focus:border-emerald-400"
-                      placeholder="לדוגמה: 14"
-                    />
+                <div className="flex flex-col md:flex-row gap-3">
+                  <div className="flex-1">
+                    <label className="text-xs text-emerald-100 block mb-1">תעריף לשעה (₪)</label>
+                    <div className="relative">
+                      <Coins className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-200" />
+                      <input 
+                        type="number" 
+                        min="0"
+                        value={hourlyRate}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setHourlyRate(val);
+                          saveJobSettings(val, taxDeduction);
+                        }}
+                        className="w-full bg-emerald-800/50 border border-emerald-600 rounded px-2 py-1.5 pr-8 text-white text-sm outline-none focus:border-emerald-400"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-xs text-emerald-100 block mb-1">ניכוי משוער לנטו (%)</label>
+                    <div className="relative">
+                      <Percent className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-200" />
+                      <input 
+                        type="number" 
+                        min="0" max="100"
+                        value={taxDeduction}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setTaxDeduction(val);
+                          saveJobSettings(hourlyRate, val);
+                        }}
+                        className="w-full bg-emerald-800/50 border border-emerald-600 rounded px-2 py-1.5 pr-8 text-white text-sm outline-none focus:border-emerald-400"
+                        placeholder="לדוגמה: 14"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
