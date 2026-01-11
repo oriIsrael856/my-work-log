@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, Calendar, Clock, Save, Briefcase, Download, Loader2, LogOut, User, Lock, Mail, ChevronDown, Check, Calculator, Coins, Percent } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Plus, Trash2, Calendar, Clock, Save, Briefcase, Download, Loader2, LogOut, User, ChevronDown, Check, Calculator, Coins, Percent } from 'lucide-react';
 import { db, auth } from './firebase';
-import { collection, addDoc, deleteDoc, doc, onSnapshot, query, where, setDoc, getDoc } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, onSnapshot, query, where, setDoc } from 'firebase/firestore';
 import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import * as XLSX from 'xlsx';
 
@@ -15,7 +15,7 @@ const WorkLogApp = () => {
 
   // --- App Data State ---
   const [entries, setEntries] = useState([]);
-  const [settingsMap, setSettingsMap] = useState({}); // TIKUN: New state for all settings
+  const [settingsMap, setSettingsMap] = useState({}); // מחזיק את כל הגדרות השכר בזיכרון
   const [dataLoading, setDataLoading] = useState(false);
   
   // --- View State ---
@@ -66,15 +66,17 @@ const WorkLogApp = () => {
       setDataLoading(false);
     });
 
-    // ב. TIKUN: משיכת כל הגדרות השכר בבת אחת (Real-time)
+    // ב. תיקון: האזנה לכל הגדרות השכר ושמירתן בזיכרון
     const qSettings = query(collection(db, "jobSettings"), where("uid", "==", user.uid));
     const unsubSettings = onSnapshot(qSettings, (snapshot) => {
         const map = {};
         snapshot.docs.forEach(doc => {
             const data = doc.data();
-            // אנו שומרים את ההגדרות במילון לפי שם העבודה
             if (data.job) {
-                map[data.job] = data;
+                map[data.job] = { 
+                    hourlyRate: data.hourlyRate || 0,
+                    taxDeduction: data.taxDeduction || 0
+                };
             }
         });
         setSettingsMap(map);
@@ -90,8 +92,8 @@ const WorkLogApp = () => {
   const jobList = useMemo(() => {
     const jobs = new Set(['עבודה 1']);
     entries.forEach(entry => { if (entry.job) jobs.add(entry.job); });
-    // אם יש הגדרות לעבודה שעדיין אין לה רשומות, נוסיף גם אותה לרשימה
-    Object.keys(settingsMap).forEach(jobName => jobs.add(jobName));
+    // מוסיף לרשימה גם עבודות שיש להן הגדרות שכר אבל אין להן עדיין רשומות
+    Object.keys(settingsMap).forEach(job => jobs.add(job));
     return Array.from(jobs).sort();
   }, [entries, settingsMap]);
 
@@ -101,34 +103,32 @@ const WorkLogApp = () => {
     }
   }, [jobList, currentJob]);
 
-  // 4. TIKUN: Update Local State when Current Job Changes (Instant)
-  // פונקציה זו מתעדכנת מיידית מהזיכרון ולא מחכה לרשת
+  // 4. תיקון: עדכון שדות הקלט בעת מעבר עבודה (מהזיכרון - ללא השהיה)
   useEffect(() => {
-    if (currentJob && settingsMap[currentJob]) {
-        setHourlyRate(settingsMap[currentJob].hourlyRate || 0);
-        setTaxDeduction(settingsMap[currentJob].taxDeduction || 0);
-    } else {
-        // אם זו עבודה חדשה לגמרי שאין לה הגדרות עדיין
-        setHourlyRate(0);
-        setTaxDeduction(0);
+    if (currentJob) {
+        const settings = settingsMap[currentJob];
+        if (settings) {
+            setHourlyRate(settings.hourlyRate);
+            setTaxDeduction(settings.taxDeduction);
+        } else {
+            setHourlyRate(0);
+            setTaxDeduction(0);
+        }
     }
-  }, [currentJob, settingsMap]);
+  }, [currentJob, settingsMap]); // רץ כשמחליפים עבודה או כשהנתונים נטענים לראשונה
 
   // --- Handlers ---
 
-  const saveJobSettings = async (newRate, newTax) => {
+  // פונקציית השמירה למסד הנתונים
+  const saveJobSettingsToDB = async (rate, tax) => {
     if (!user || !currentJob) return;
     
-    // עדכון אופטימי (ויזואלי) מיידי
-    setHourlyRate(newRate);
-    setTaxDeduction(newTax);
-
     const settingsId = `${user.uid}_${encodeURIComponent(currentJob)}_settings`;
     
     try {
       await setDoc(doc(db, "jobSettings", settingsId), {
-        hourlyRate: Number(newRate),
-        taxDeduction: Number(newTax),
+        hourlyRate: Number(rate),
+        taxDeduction: Number(tax),
         uid: user.uid,
         job: currentJob
       }, { merge: true });
@@ -162,7 +162,6 @@ const WorkLogApp = () => {
       setNewJobName('');
       setIsCreatingJob(false);
       setIsJobMenuOpen(false);
-      // אין צורך לאפס ידנית, ה-useEffect יעשה זאת כי אין הגדרות לעבודה החדשה במפה
     }
   };
 
@@ -322,7 +321,8 @@ const WorkLogApp = () => {
                         type="number" 
                         min="0"
                         value={hourlyRate}
-                        onChange={(e) => saveJobSettings(e.target.value, taxDeduction)}
+                        onChange={(e) => setHourlyRate(e.target.value)} // רק עדכון מקומי
+                        onBlur={() => saveJobSettingsToDB(hourlyRate, taxDeduction)} // שמירה ביציאה מהשדה
                         className="w-full bg-emerald-800/50 border border-emerald-600 rounded px-2 py-1.5 pr-8 text-white text-sm outline-none focus:border-emerald-400"
                       />
                     </div>
@@ -335,7 +335,8 @@ const WorkLogApp = () => {
                         type="number" 
                         min="0" max="100"
                         value={taxDeduction}
-                        onChange={(e) => saveJobSettings(hourlyRate, e.target.value)}
+                        onChange={(e) => setTaxDeduction(e.target.value)} // רק עדכון מקומי
+                        onBlur={() => saveJobSettingsToDB(hourlyRate, taxDeduction)} // שמירה ביציאה מהשדה
                         className="w-full bg-emerald-800/50 border border-emerald-600 rounded px-2 py-1.5 pr-8 text-white text-sm outline-none focus:border-emerald-400"
                         placeholder="לדוגמה: 14"
                       />
