@@ -15,6 +15,7 @@ const WorkLogApp = () => {
 
   // --- App Data State ---
   const [entries, setEntries] = useState([]);
+  const [settingsMap, setSettingsMap] = useState({}); // TIKUN: New state for all settings
   const [dataLoading, setDataLoading] = useState(false);
   
   // --- View State ---
@@ -23,7 +24,7 @@ const WorkLogApp = () => {
   const [newJobName, setNewJobName] = useState('');
   const [isCreatingJob, setIsCreatingJob] = useState(false);
 
-  // --- Job Settings State (Separate per job) ---
+  // --- Job Settings State ---
   const [hourlyRate, setHourlyRate] = useState(0); 
   const [taxDeduction, setTaxDeduction] = useState(0); 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -42,18 +43,19 @@ const WorkLogApp = () => {
     return () => unsubscribe();
   }, []);
 
-  // 2. Data Fetching
+  // 2. Data Fetching (Entries + Settings)
   useEffect(() => {
     if (!user) {
       setEntries([]);
+      setSettingsMap({});
       return;
     }
 
     setDataLoading(true);
     
-    const q = query(collection(db, "workEntries"), where("uid", "==", user.uid));
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    // א. משיכת רשומות עבודה
+    const qEntries = query(collection(db, "workEntries"), where("uid", "==", user.uid));
+    const unsubEntries = onSnapshot(qEntries, (snapshot) => {
       const entriesData = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
@@ -62,20 +64,36 @@ const WorkLogApp = () => {
 
       setEntries(entriesData);
       setDataLoading(false);
-    }, (error) => {
-      console.error("Error fetching data:", error);
-      setDataLoading(false);
     });
 
-    return () => unsubscribe();
+    // ב. TIKUN: משיכת כל הגדרות השכר בבת אחת (Real-time)
+    const qSettings = query(collection(db, "jobSettings"), where("uid", "==", user.uid));
+    const unsubSettings = onSnapshot(qSettings, (snapshot) => {
+        const map = {};
+        snapshot.docs.forEach(doc => {
+            const data = doc.data();
+            // אנו שומרים את ההגדרות במילון לפי שם העבודה
+            if (data.job) {
+                map[data.job] = data;
+            }
+        });
+        setSettingsMap(map);
+    });
+
+    return () => {
+        unsubEntries();
+        unsubSettings();
+    };
   }, [user]);
 
   // 3. Job List Logic
   const jobList = useMemo(() => {
     const jobs = new Set(['עבודה 1']);
     entries.forEach(entry => { if (entry.job) jobs.add(entry.job); });
+    // אם יש הגדרות לעבודה שעדיין אין לה רשומות, נוסיף גם אותה לרשימה
+    Object.keys(settingsMap).forEach(jobName => jobs.add(jobName));
     return Array.from(jobs).sort();
-  }, [entries]);
+  }, [entries, settingsMap]);
 
   useEffect(() => {
     if (!currentJob && jobList.length > 0) {
@@ -83,40 +101,28 @@ const WorkLogApp = () => {
     }
   }, [jobList, currentJob]);
 
-  // 4. Load Job Settings (Rate & Tax) - הפרדה מלאה בין עבודות
+  // 4. TIKUN: Update Local State when Current Job Changes (Instant)
+  // פונקציה זו מתעדכנת מיידית מהזיכרון ולא מחכה לרשת
   useEffect(() => {
-    const loadSettings = async () => {
-      if (!user || !currentJob) return;
-      
-      // איפוס זמני כדי שלא נראה את הנתונים של העבודה הקודמת
-      setHourlyRate(0);
-      setTaxDeduction(0);
-
-      // יצירת מזהה ייחודי שכולל גם את שם המשתמש וגם את שם העבודה
-      // שימוש ב-encodeURIComponent מבטיח ששמות עבודה עם רווחים יעבדו תקין
-      const settingsId = `${user.uid}_${encodeURIComponent(currentJob)}_settings`;
-      const docRef = doc(db, "jobSettings", settingsId);
-      
-      try {
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setHourlyRate(docSnap.data().hourlyRate || 0);
-          setTaxDeduction(docSnap.data().taxDeduction || 0);
-        }
-      } catch (error) {
-        console.error("Error loading settings:", error);
-      }
-    };
-
-    loadSettings();
-  }, [user, currentJob]); // רץ בכל פעם שמשתנה העבודה הנוכחית
+    if (currentJob && settingsMap[currentJob]) {
+        setHourlyRate(settingsMap[currentJob].hourlyRate || 0);
+        setTaxDeduction(settingsMap[currentJob].taxDeduction || 0);
+    } else {
+        // אם זו עבודה חדשה לגמרי שאין לה הגדרות עדיין
+        setHourlyRate(0);
+        setTaxDeduction(0);
+    }
+  }, [currentJob, settingsMap]);
 
   // --- Handlers ---
 
   const saveJobSettings = async (newRate, newTax) => {
     if (!user || !currentJob) return;
     
-    // אותו מזהה ייחודי כמו בקריאה
+    // עדכון אופטימי (ויזואלי) מיידי
+    setHourlyRate(newRate);
+    setTaxDeduction(newTax);
+
     const settingsId = `${user.uid}_${encodeURIComponent(currentJob)}_settings`;
     
     try {
@@ -125,7 +131,7 @@ const WorkLogApp = () => {
         taxDeduction: Number(newTax),
         uid: user.uid,
         job: currentJob
-      }, { merge: true }); // merge מבטיח שלא נדרוס שדות אחרים אם יהיו בעתיד
+      }, { merge: true });
     } catch (error) {
       console.error("Error saving settings:", error);
     }
@@ -151,13 +157,12 @@ const WorkLogApp = () => {
 
   const handleCreateJob = () => {
     if (newJobName.trim()) {
-      setCurrentJob(newJobName.trim());
+      const name = newJobName.trim();
+      setCurrentJob(name);
       setNewJobName('');
       setIsCreatingJob(false);
       setIsJobMenuOpen(false);
-      // איפוס הגדרות לעבודה החדשה
-      setHourlyRate(0);
-      setTaxDeduction(0);
+      // אין צורך לאפס ידנית, ה-useEffect יעשה זאת כי אין הגדרות לעבודה החדשה במפה
     }
   };
 
@@ -317,11 +322,7 @@ const WorkLogApp = () => {
                         type="number" 
                         min="0"
                         value={hourlyRate}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setHourlyRate(val);
-                          saveJobSettings(val, taxDeduction);
-                        }}
+                        onChange={(e) => saveJobSettings(e.target.value, taxDeduction)}
                         className="w-full bg-emerald-800/50 border border-emerald-600 rounded px-2 py-1.5 pr-8 text-white text-sm outline-none focus:border-emerald-400"
                       />
                     </div>
@@ -334,11 +335,7 @@ const WorkLogApp = () => {
                         type="number" 
                         min="0" max="100"
                         value={taxDeduction}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setTaxDeduction(val);
-                          saveJobSettings(hourlyRate, val);
-                        }}
+                        onChange={(e) => saveJobSettings(hourlyRate, e.target.value)}
                         className="w-full bg-emerald-800/50 border border-emerald-600 rounded px-2 py-1.5 pr-8 text-white text-sm outline-none focus:border-emerald-400"
                         placeholder="לדוגמה: 14"
                       />
