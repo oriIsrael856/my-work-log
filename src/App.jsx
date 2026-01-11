@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, Calendar, Clock, Save, Briefcase, Download, Loader2, LogOut, User, ChevronDown, Check, Calculator, Coins, Percent } from 'lucide-react';
+import { Plus, Trash2, Calendar, Clock, Save, Briefcase, Download, Loader2, LogOut, User, ChevronDown, Check, Calculator, Coins, Percent, LayoutDashboard, Target } from 'lucide-react';
 import { db, auth } from './firebase';
 import { collection, addDoc, deleteDoc, doc, onSnapshot, query, where, setDoc } from 'firebase/firestore';
 import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
@@ -23,9 +23,10 @@ const WorkLogApp = () => {
   const [isJobMenuOpen, setIsJobMenuOpen] = useState(false);
   const [newJobName, setNewJobName] = useState('');
   const [isCreatingJob, setIsCreatingJob] = useState(false);
+  const [statsView, setStatsView] = useState('current'); // 'current' | 'global'
 
   // --- Job Settings State ---
-  const [hourlyRate, setHourlyRate] = useState(''); // שיניתי למחרוזת ריקה כברירת מחדל
+  const [hourlyRate, setHourlyRate] = useState(''); 
   const [taxDeduction, setTaxDeduction] = useState(''); 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -79,7 +80,6 @@ const WorkLogApp = () => {
                 };
             }
         });
-        console.log("Settings loaded from Firebase:", map); // DEBUG LOG
         setSettingsMap(map);
     });
 
@@ -106,15 +106,11 @@ const WorkLogApp = () => {
   // 4. Update Inputs on Job Switch
   useEffect(() => {
     if (currentJob) {
-        console.log(`Switching to job: ${currentJob}`); // DEBUG LOG
         const settings = settingsMap[currentJob];
-        
         if (settings) {
-            console.log("Found settings:", settings); // DEBUG LOG
             setHourlyRate(settings.hourlyRate);
             setTaxDeduction(settings.taxDeduction);
         } else {
-            console.log("No settings found for this job, resetting to 0"); // DEBUG LOG
             setHourlyRate('');
             setTaxDeduction('');
         }
@@ -126,14 +122,11 @@ const WorkLogApp = () => {
   const saveJobSettingsToDB = async (rate, tax) => {
     if (!user || !currentJob) return;
     
-    // שומרים גם אם הערך הוא 0 או ריק
     const rateToSave = rate === '' ? 0 : Number(rate);
     const taxToSave = tax === '' ? 0 : Number(tax);
-
     const settingsId = `${user.uid}_${encodeURIComponent(currentJob)}_settings`;
     
     try {
-      console.log(`Saving to DB for ${currentJob}: Rate=${rateToSave}, Tax=${taxToSave}`); // DEBUG LOG
       await setDoc(doc(db, "jobSettings", settingsId), {
         hourlyRate: rateToSave,
         taxDeduction: taxToSave,
@@ -177,7 +170,6 @@ const WorkLogApp = () => {
     e.preventDefault();
     if (!date || !hours || parseFloat(hours) <= 0) return;
 
-    // שימוש בערכים הנוכחיים של התעריף עבור חישובים עתידיים אם נרצה לשמור אותם ברשומה עצמה
     try {
       await addDoc(collection(db, "workEntries"), {
         uid: user.uid,
@@ -234,15 +226,51 @@ const WorkLogApp = () => {
   const formatDate = (d) => new Date(d).toLocaleDateString('he-IL', { weekday: 'long', day: '2-digit', month: '2-digit' });
 
   // --- Calculations ---
+
+  // 1. Current Job Stats
   const currentJobEntries = useMemo(() => {
     return entries.filter(entry => entry.job === currentJob);
   }, [entries, currentJob]);
 
-  const totalHours = currentJobEntries.reduce((sum, entry) => sum + entry.hours, 0);
-  const rateCalc = hourlyRate === '' ? 0 : Number(hourlyRate);
-  const taxCalc = taxDeduction === '' ? 0 : Number(taxDeduction);
-  const grossSalary = totalHours * rateCalc;
-  const netSalary = grossSalary * (1 - (taxCalc / 100));
+  const currentStats = useMemo(() => {
+    const totalHours = currentJobEntries.reduce((sum, entry) => sum + entry.hours, 0);
+    const rateCalc = hourlyRate === '' ? 0 : Number(hourlyRate);
+    const taxCalc = taxDeduction === '' ? 0 : Number(taxDeduction);
+    const grossSalary = totalHours * rateCalc;
+    const netSalary = grossSalary * (1 - (taxCalc / 100));
+    return { totalHours, grossSalary, netSalary };
+  }, [currentJobEntries, hourlyRate, taxDeduction]);
+
+  // 2. Global Stats (TIKUN: Renamed keys to match currentStats)
+  const globalStats = useMemo(() => {
+    let totalHours = 0;
+    let totalGross = 0;
+    let totalNet = 0;
+
+    entries.forEach(entry => {
+        const jobSettings = settingsMap[entry.job];
+        const rate = jobSettings ? Number(jobSettings.hourlyRate || 0) : 0;
+        const tax = jobSettings ? Number(jobSettings.taxDeduction || 0) : 0;
+
+        const entryGross = entry.hours * rate;
+        const entryNet = entryGross * (1 - (tax / 100));
+
+        totalHours += entry.hours;
+        totalGross += entryGross;
+        totalNet += entryNet;
+    });
+
+    // כאן היה הבאג - שיניתי את שמות המפתחות
+    return { 
+        totalHours, 
+        grossSalary: totalGross, 
+        netSalary: totalNet 
+    };
+  }, [entries, settingsMap]);
+
+  // Determine what to display
+  const displayStats = statsView === 'current' ? currentStats : globalStats;
+  const isGlobal = statsView === 'global';
 
   // --- Views ---
 
@@ -273,9 +301,9 @@ const WorkLogApp = () => {
       <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-visible border border-slate-700 relative">
         
         {/* --- Header --- */}
-        <header className="bg-emerald-600 text-white p-4 md:p-6 rounded-t-2xl relative z-20">
+        <header className="bg-emerald-600 text-white p-4 md:p-6 rounded-t-2xl relative z-20 transition-all duration-300">
           
-          {/* Top Bar: Job Select + Logout */}
+          {/* Top Bar */}
           <div className="flex justify-between items-start mb-4">
             <div className="relative">
               <p className="text-emerald-100 text-xs opacity-90 mb-1">עבודה נוכחית:</p>
@@ -308,8 +336,8 @@ const WorkLogApp = () => {
             <button onClick={handleLogout} className="bg-emerald-800/50 p-2 rounded-lg hover:bg-emerald-800 transition-colors"><LogOut className="w-5 h-5" /></button>
           </div>
 
-          {/* --- Settings Toggle (Rate & Tax) --- */}
-          <div className="mb-4">
+          {/* Settings Toggle */}
+          <div className="mb-6">
             <button 
               onClick={() => setIsSettingsOpen(!isSettingsOpen)}
               className="text-xs bg-emerald-700/50 hover:bg-emerald-700 px-3 py-1.5 rounded flex items-center gap-2 transition-colors"
@@ -318,7 +346,6 @@ const WorkLogApp = () => {
               {isSettingsOpen ? 'סגור הגדרות שכר' : `תעריף: ${hourlyRate || 0}₪ | מס: ${taxDeduction || 0}%`}
             </button>
 
-            {/* Settings Inputs */}
             {isSettingsOpen && (
               <div className="mt-3 bg-emerald-700/40 p-4 rounded-lg animate-in fade-in slide-in-from-top-1 border border-emerald-500/30">
                 <div className="text-xs text-emerald-200 font-bold mb-3 border-b border-emerald-600/50 pb-1">
@@ -329,10 +356,8 @@ const WorkLogApp = () => {
                     <label className="text-xs text-emerald-100 block mb-1">תעריף לשעה (₪)</label>
                     <div className="relative">
                       <Coins className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-200" />
-                      
-                      {/* --- התיקון הקריטי: key --- */}
                       <input 
-                        key={`${currentJob}-rate`}  // זה מכריח את ה-Input להתאפס כשהעבודה משתנה
+                        key={`${currentJob}-rate`}
                         type="number" 
                         min="0"
                         value={hourlyRate}
@@ -341,17 +366,14 @@ const WorkLogApp = () => {
                         className="w-full bg-emerald-800/50 border border-emerald-600 rounded px-2 py-1.5 pr-8 text-white text-sm outline-none focus:border-emerald-400"
                         placeholder="0"
                       />
-
                     </div>
                   </div>
                   <div className="flex-1">
                     <label className="text-xs text-emerald-100 block mb-1">ניכוי משוער לנטו (%)</label>
                     <div className="relative">
                       <Percent className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-200" />
-                      
-                      {/* --- התיקון הקריטי: key --- */}
                       <input 
-                        key={`${currentJob}-tax`} // זה מכריח את ה-Input להתאפס כשהעבודה משתנה
+                        key={`${currentJob}-tax`}
                         type="number" 
                         min="0" max="100"
                         value={taxDeduction}
@@ -360,7 +382,6 @@ const WorkLogApp = () => {
                         className="w-full bg-emerald-800/50 border border-emerald-600 rounded px-2 py-1.5 pr-8 text-white text-sm outline-none focus:border-emerald-400"
                         placeholder="0"
                       />
-
                     </div>
                   </div>
                 </div>
@@ -368,25 +389,54 @@ const WorkLogApp = () => {
             )}
           </div>
 
-          {/* Stats Grid */}
-          <div className="grid grid-cols-3 gap-2 md:gap-4">
-             <div className="bg-white/10 px-2 py-2 md:px-5 md:py-3 rounded-xl backdrop-blur-md text-center border border-emerald-400/20">
-                <span className="text-emerald-100 text-[10px] md:text-xs font-bold uppercase block mb-1">שעות</span>
-                <span className="text-xl md:text-3xl font-bold">{totalHours}</span>
+          {/* --- Stats Toggle Switch --- */}
+          <div className="flex bg-emerald-800/40 p-1 rounded-lg mb-4 w-fit mx-auto md:mx-0">
+            <button 
+                onClick={() => setStatsView('current')}
+                className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-bold transition-all ${!isGlobal ? 'bg-white text-emerald-700 shadow-sm' : 'text-emerald-200 hover:text-white'}`}
+            >
+                <Target className="w-3 h-3" /> עבודה נוכחית
+            </button>
+            <button 
+                onClick={() => setStatsView('global')}
+                className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-bold transition-all ${isGlobal ? 'bg-slate-700 text-white shadow-sm' : 'text-emerald-200 hover:text-white'}`}
+            >
+                <LayoutDashboard className="w-3 h-3" /> סיכום כללי
+            </button>
+          </div>
+
+          {/* --- Stats Grid --- */}
+          <div className={`grid grid-cols-3 gap-2 md:gap-4 transition-all duration-300 p-2 rounded-xl ${isGlobal ? 'bg-slate-800/50 border border-slate-600/50' : ''}`}>
+             
+             {/* Box 1: Hours */}
+             <div className={`px-2 py-2 md:px-5 md:py-3 rounded-xl backdrop-blur-md text-center border ${isGlobal ? 'bg-slate-700/50 border-slate-500/30' : 'bg-white/10 border-emerald-400/20'}`}>
+                <span className={`${isGlobal ? 'text-slate-300' : 'text-emerald-100'} text-[10px] md:text-xs font-bold uppercase block mb-1`}>סה"כ שעות</span>
+                <span className="text-xl md:text-3xl font-bold">{displayStats.totalHours}</span>
              </div>
-             <div className="bg-white/10 px-2 py-2 md:px-5 md:py-3 rounded-xl backdrop-blur-md text-center border border-emerald-400/20">
-                <span className="text-emerald-100 text-[10px] md:text-xs font-bold uppercase block mb-1">ברוטו</span>
-                <span className="text-xl md:text-3xl font-bold">₪{grossSalary.toLocaleString()}</span>
+             
+             {/* Box 2: Gross */}
+             <div className={`px-2 py-2 md:px-5 md:py-3 rounded-xl backdrop-blur-md text-center border ${isGlobal ? 'bg-slate-700/50 border-slate-500/30' : 'bg-white/10 border-emerald-400/20'}`}>
+                <span className={`${isGlobal ? 'text-slate-300' : 'text-emerald-100'} text-[10px] md:text-xs font-bold uppercase block mb-1`}>סה"כ ברוטו</span>
+                <span className="text-xl md:text-3xl font-bold">₪{(displayStats.grossSalary || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
              </div>
-             <div className="bg-emerald-900/30 px-2 py-2 md:px-5 md:py-3 rounded-xl backdrop-blur-md text-center border border-emerald-400/40 shadow-inner">
-                <span className="text-emerald-200 text-[10px] md:text-xs font-bold uppercase block mb-1">נטו (משוער)</span>
-                <span className="text-xl md:text-3xl font-bold text-emerald-50">₪{netSalary.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+             
+             {/* Box 3: Net */}
+             <div className={`px-2 py-2 md:px-5 md:py-3 rounded-xl backdrop-blur-md text-center shadow-inner border ${isGlobal ? 'bg-blue-600/40 border-blue-400/40 text-blue-50' : 'bg-emerald-900/30 border-emerald-400/40 text-emerald-50'}`}>
+                <span className={`${isGlobal ? 'text-blue-200' : 'text-emerald-200'} text-[10px] md:text-xs font-bold uppercase block mb-1`}>נטו (משוער)</span>
+                <span className="text-xl md:text-3xl font-bold">₪{(displayStats.netSalary || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
              </div>
           </div>
+          
+          {isGlobal && (
+             <div className="text-center mt-2 text-[10px] text-slate-300 opacity-70">
+                 * מציג נתונים מכל העבודות והשנים יחד
+             </div>
+          )}
+
         </header>
 
         <div className="p-4 md:p-6 bg-slate-50 min-h-[500px]">
-          {/* שאר הקוד נשאר אותו דבר... */}
+          {/* שאר הקוד נשאר ללא שינוי - Form ו-History */}
           <section className="bg-white rounded-xl shadow-sm border p-4 md:p-6 mb-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="font-bold text-slate-800 flex items-center gap-2 text-sm md:text-base">
