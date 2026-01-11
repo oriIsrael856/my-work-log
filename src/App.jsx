@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Trash2, Calendar, Clock, Save, Briefcase, Download, Loader2, LogOut, User, ChevronDown, Check, Calculator, Coins, Percent } from 'lucide-react';
 import { db, auth } from './firebase';
 import { collection, addDoc, deleteDoc, doc, onSnapshot, query, where, setDoc } from 'firebase/firestore';
@@ -15,7 +15,7 @@ const WorkLogApp = () => {
 
   // --- App Data State ---
   const [entries, setEntries] = useState([]);
-  const [settingsMap, setSettingsMap] = useState({}); // מחזיק את כל הגדרות השכר בזיכרון
+  const [settingsMap, setSettingsMap] = useState({}); 
   const [dataLoading, setDataLoading] = useState(false);
   
   // --- View State ---
@@ -25,8 +25,8 @@ const WorkLogApp = () => {
   const [isCreatingJob, setIsCreatingJob] = useState(false);
 
   // --- Job Settings State ---
-  const [hourlyRate, setHourlyRate] = useState(0); 
-  const [taxDeduction, setTaxDeduction] = useState(0); 
+  const [hourlyRate, setHourlyRate] = useState(''); // שיניתי למחרוזת ריקה כברירת מחדל
+  const [taxDeduction, setTaxDeduction] = useState(''); 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // --- Form State ---
@@ -43,7 +43,7 @@ const WorkLogApp = () => {
     return () => unsubscribe();
   }, []);
 
-  // 2. Data Fetching (Entries + Settings)
+  // 2. Data Fetching
   useEffect(() => {
     if (!user) {
       setEntries([]);
@@ -53,7 +53,7 @@ const WorkLogApp = () => {
 
     setDataLoading(true);
     
-    // א. משיכת רשומות עבודה
+    // משיכת רשומות
     const qEntries = query(collection(db, "workEntries"), where("uid", "==", user.uid));
     const unsubEntries = onSnapshot(qEntries, (snapshot) => {
       const entriesData = snapshot.docs.map(doc => ({
@@ -66,7 +66,7 @@ const WorkLogApp = () => {
       setDataLoading(false);
     });
 
-    // ב. תיקון: האזנה לכל הגדרות השכר ושמירתן בזיכרון
+    // משיכת הגדרות
     const qSettings = query(collection(db, "jobSettings"), where("uid", "==", user.uid));
     const unsubSettings = onSnapshot(qSettings, (snapshot) => {
         const map = {};
@@ -74,11 +74,12 @@ const WorkLogApp = () => {
             const data = doc.data();
             if (data.job) {
                 map[data.job] = { 
-                    hourlyRate: data.hourlyRate || 0,
-                    taxDeduction: data.taxDeduction || 0
+                    hourlyRate: data.hourlyRate,
+                    taxDeduction: data.taxDeduction
                 };
             }
         });
+        console.log("Settings loaded from Firebase:", map); // DEBUG LOG
         setSettingsMap(map);
     });
 
@@ -92,7 +93,6 @@ const WorkLogApp = () => {
   const jobList = useMemo(() => {
     const jobs = new Set(['עבודה 1']);
     entries.forEach(entry => { if (entry.job) jobs.add(entry.job); });
-    // מוסיף לרשימה גם עבודות שיש להן הגדרות שכר אבל אין להן עדיין רשומות
     Object.keys(settingsMap).forEach(job => jobs.add(job));
     return Array.from(jobs).sort();
   }, [entries, settingsMap]);
@@ -103,32 +103,40 @@ const WorkLogApp = () => {
     }
   }, [jobList, currentJob]);
 
-  // 4. תיקון: עדכון שדות הקלט בעת מעבר עבודה (מהזיכרון - ללא השהיה)
+  // 4. Update Inputs on Job Switch
   useEffect(() => {
     if (currentJob) {
+        console.log(`Switching to job: ${currentJob}`); // DEBUG LOG
         const settings = settingsMap[currentJob];
+        
         if (settings) {
+            console.log("Found settings:", settings); // DEBUG LOG
             setHourlyRate(settings.hourlyRate);
             setTaxDeduction(settings.taxDeduction);
         } else {
-            setHourlyRate(0);
-            setTaxDeduction(0);
+            console.log("No settings found for this job, resetting to 0"); // DEBUG LOG
+            setHourlyRate('');
+            setTaxDeduction('');
         }
     }
-  }, [currentJob, settingsMap]); // רץ כשמחליפים עבודה או כשהנתונים נטענים לראשונה
+  }, [currentJob, settingsMap]);
 
   // --- Handlers ---
 
-  // פונקציית השמירה למסד הנתונים
   const saveJobSettingsToDB = async (rate, tax) => {
     if (!user || !currentJob) return;
     
+    // שומרים גם אם הערך הוא 0 או ריק
+    const rateToSave = rate === '' ? 0 : Number(rate);
+    const taxToSave = tax === '' ? 0 : Number(tax);
+
     const settingsId = `${user.uid}_${encodeURIComponent(currentJob)}_settings`;
     
     try {
+      console.log(`Saving to DB for ${currentJob}: Rate=${rateToSave}, Tax=${taxToSave}`); // DEBUG LOG
       await setDoc(doc(db, "jobSettings", settingsId), {
-        hourlyRate: Number(rate),
-        taxDeduction: Number(tax),
+        hourlyRate: rateToSave,
+        taxDeduction: taxToSave,
         uid: user.uid,
         job: currentJob
       }, { merge: true });
@@ -169,6 +177,7 @@ const WorkLogApp = () => {
     e.preventDefault();
     if (!date || !hours || parseFloat(hours) <= 0) return;
 
+    // שימוש בערכים הנוכחיים של התעריף עבור חישובים עתידיים אם נרצה לשמור אותם ברשומה עצמה
     try {
       await addDoc(collection(db, "workEntries"), {
         uid: user.uid,
@@ -195,6 +204,7 @@ const WorkLogApp = () => {
     const selectedDate = new Date(date);
     const targetMonth = selectedDate.getMonth();
     const targetYear = selectedDate.getFullYear();
+    const rateForCalc = hourlyRate === '' ? 0 : Number(hourlyRate);
     
     const monthlyEntries = currentJobEntries.filter(entry => {
       const d = new Date(entry.date);
@@ -209,8 +219,8 @@ const WorkLogApp = () => {
     const dataForExcel = monthlyEntries.map(e => ({
       "תאריך": e.date,
       "שעות": e.hours,
-      "תעריף שעתי": hourlyRate,
-      "שכר מוערך": (e.hours * hourlyRate).toFixed(2),
+      "תעריף שעתי": rateForCalc,
+      "שכר מוערך": (e.hours * rateForCalc).toFixed(2),
       "תיאור": e.description
     }));
 
@@ -229,8 +239,10 @@ const WorkLogApp = () => {
   }, [entries, currentJob]);
 
   const totalHours = currentJobEntries.reduce((sum, entry) => sum + entry.hours, 0);
-  const grossSalary = totalHours * hourlyRate;
-  const netSalary = grossSalary * (1 - (taxDeduction / 100));
+  const rateCalc = hourlyRate === '' ? 0 : Number(hourlyRate);
+  const taxCalc = taxDeduction === '' ? 0 : Number(taxDeduction);
+  const grossSalary = totalHours * rateCalc;
+  const netSalary = grossSalary * (1 - (taxCalc / 100));
 
   // --- Views ---
 
@@ -303,7 +315,7 @@ const WorkLogApp = () => {
               className="text-xs bg-emerald-700/50 hover:bg-emerald-700 px-3 py-1.5 rounded flex items-center gap-2 transition-colors"
             >
               <Calculator className="w-3 h-3" />
-              {isSettingsOpen ? 'סגור הגדרות שכר' : `תעריף: ${hourlyRate}₪ | מס: ${taxDeduction}%`}
+              {isSettingsOpen ? 'סגור הגדרות שכר' : `תעריף: ${hourlyRate || 0}₪ | מס: ${taxDeduction || 0}%`}
             </button>
 
             {/* Settings Inputs */}
@@ -317,29 +329,38 @@ const WorkLogApp = () => {
                     <label className="text-xs text-emerald-100 block mb-1">תעריף לשעה (₪)</label>
                     <div className="relative">
                       <Coins className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-200" />
+                      
+                      {/* --- התיקון הקריטי: key --- */}
                       <input 
+                        key={`${currentJob}-rate`}  // זה מכריח את ה-Input להתאפס כשהעבודה משתנה
                         type="number" 
                         min="0"
                         value={hourlyRate}
-                        onChange={(e) => setHourlyRate(e.target.value)} // רק עדכון מקומי
-                        onBlur={() => saveJobSettingsToDB(hourlyRate, taxDeduction)} // שמירה ביציאה מהשדה
+                        onChange={(e) => setHourlyRate(e.target.value)} 
+                        onBlur={() => saveJobSettingsToDB(hourlyRate, taxDeduction)} 
                         className="w-full bg-emerald-800/50 border border-emerald-600 rounded px-2 py-1.5 pr-8 text-white text-sm outline-none focus:border-emerald-400"
+                        placeholder="0"
                       />
+
                     </div>
                   </div>
                   <div className="flex-1">
                     <label className="text-xs text-emerald-100 block mb-1">ניכוי משוער לנטו (%)</label>
                     <div className="relative">
                       <Percent className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-200" />
+                      
+                      {/* --- התיקון הקריטי: key --- */}
                       <input 
+                        key={`${currentJob}-tax`} // זה מכריח את ה-Input להתאפס כשהעבודה משתנה
                         type="number" 
                         min="0" max="100"
                         value={taxDeduction}
-                        onChange={(e) => setTaxDeduction(e.target.value)} // רק עדכון מקומי
-                        onBlur={() => saveJobSettingsToDB(hourlyRate, taxDeduction)} // שמירה ביציאה מהשדה
+                        onChange={(e) => setTaxDeduction(e.target.value)} 
+                        onBlur={() => saveJobSettingsToDB(hourlyRate, taxDeduction)} 
                         className="w-full bg-emerald-800/50 border border-emerald-600 rounded px-2 py-1.5 pr-8 text-white text-sm outline-none focus:border-emerald-400"
-                        placeholder="לדוגמה: 14"
+                        placeholder="0"
                       />
+
                     </div>
                   </div>
                 </div>
@@ -365,7 +386,7 @@ const WorkLogApp = () => {
         </header>
 
         <div className="p-4 md:p-6 bg-slate-50 min-h-[500px]">
-          
+          {/* שאר הקוד נשאר אותו דבר... */}
           <section className="bg-white rounded-xl shadow-sm border p-4 md:p-6 mb-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="font-bold text-slate-800 flex items-center gap-2 text-sm md:text-base">
