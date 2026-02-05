@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, Calendar, Clock, Save, Briefcase, Download, Loader2, LogOut, User, ChevronDown, Check, Calculator, Coins, Percent, LayoutDashboard, Target } from 'lucide-react';
+import { Plus, Trash2, Calendar, Clock, Save, Briefcase, Download, Loader2, LogOut, User, ChevronDown, Check, Calculator, Coins, Percent, LayoutDashboard, Target, ChevronLeft, ChevronRight } from 'lucide-react';
 import { db, auth } from './firebase';
 import { collection, addDoc, deleteDoc, doc, onSnapshot, query, where, setDoc } from 'firebase/firestore';
 import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
@@ -24,6 +24,9 @@ const WorkLogApp = () => {
   const [newJobName, setNewJobName] = useState('');
   const [isCreatingJob, setIsCreatingJob] = useState(false);
   const [statsView, setStatsView] = useState('current'); // 'current' | 'global'
+  
+  // TIKUN: New state for viewing specific month independent of input date
+  const [viewDate, setViewDate] = useState(new Date()); 
 
   // --- Job Settings State ---
   const [hourlyRate, setHourlyRate] = useState(''); 
@@ -119,6 +122,12 @@ const WorkLogApp = () => {
 
   // --- Handlers ---
 
+  const changeViewMonth = (offset) => {
+      const newDate = new Date(viewDate);
+      newDate.setMonth(newDate.getMonth() + offset);
+      setViewDate(newDate);
+  };
+
   const saveJobSettingsToDB = async (rate, tax) => {
     if (!user || !currentJob) return;
     
@@ -192,12 +201,13 @@ const WorkLogApp = () => {
     }
   };
 
+  // TIKUN: Export based on viewDate
   const handleExportToExcel = () => {
-    const selectedDate = new Date(date);
-    const targetMonth = selectedDate.getMonth();
-    const targetYear = selectedDate.getFullYear();
+    const targetMonth = viewDate.getMonth();
+    const targetYear = viewDate.getFullYear();
     const rateForCalc = hourlyRate === '' ? 0 : Number(hourlyRate);
     
+    // Filter based on View Date, not Form Date
     const monthlyEntries = currentJobEntries.filter(entry => {
       const d = new Date(entry.date);
       return d.getMonth() === targetMonth && d.getFullYear() === targetYear;
@@ -227,46 +237,64 @@ const WorkLogApp = () => {
 
   // --- Calculations ---
 
-  // 1. Current Job Stats
+  // TIKUN: Calculations based on viewDate state
+  const viewMonth = viewDate.getMonth();
+  const viewYear = viewDate.getFullYear();
+  const monthDisplay = viewDate.toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
+
+  // 1. Current Job Stats (Filtered by VIEW date)
   const currentJobEntries = useMemo(() => {
     return entries.filter(entry => entry.job === currentJob);
   }, [entries, currentJob]);
 
+  // TIKUN: Filtered History List (Only show entries for the viewed month)
+  const filteredHistoryEntries = useMemo(() => {
+      return currentJobEntries.filter(entry => {
+          const d = new Date(entry.date);
+          return d.getMonth() === viewMonth && d.getFullYear() === viewYear;
+      });
+  }, [currentJobEntries, viewMonth, viewYear]);
+
   const currentStats = useMemo(() => {
-    const totalHours = currentJobEntries.reduce((sum, entry) => sum + entry.hours, 0);
+    // Calculate stats from the filtered history list
+    const totalHours = filteredHistoryEntries.reduce((sum, entry) => sum + entry.hours, 0);
     const rateCalc = hourlyRate === '' ? 0 : Number(hourlyRate);
     const taxCalc = taxDeduction === '' ? 0 : Number(taxDeduction);
     const grossSalary = totalHours * rateCalc;
     const netSalary = grossSalary * (1 - (taxCalc / 100));
     return { totalHours, grossSalary, netSalary };
-  }, [currentJobEntries, hourlyRate, taxDeduction]);
+  }, [filteredHistoryEntries, hourlyRate, taxDeduction]);
 
-  // 2. Global Stats (TIKUN: Renamed keys to match currentStats)
+  // 2. Global Stats (Filtered by VIEW date)
   const globalStats = useMemo(() => {
     let totalHours = 0;
     let totalGross = 0;
     let totalNet = 0;
 
     entries.forEach(entry => {
-        const jobSettings = settingsMap[entry.job];
-        const rate = jobSettings ? Number(jobSettings.hourlyRate || 0) : 0;
-        const tax = jobSettings ? Number(jobSettings.taxDeduction || 0) : 0;
+        // Filter by VIEW date for ALL jobs
+        const d = new Date(entry.date);
+        if (d.getMonth() === viewMonth && d.getFullYear() === viewYear) {
+            
+            const jobSettings = settingsMap[entry.job];
+            const rate = jobSettings ? Number(jobSettings.hourlyRate || 0) : 0;
+            const tax = jobSettings ? Number(jobSettings.taxDeduction || 0) : 0;
 
-        const entryGross = entry.hours * rate;
-        const entryNet = entryGross * (1 - (tax / 100));
+            const entryGross = entry.hours * rate;
+            const entryNet = entryGross * (1 - (tax / 100));
 
-        totalHours += entry.hours;
-        totalGross += entryGross;
-        totalNet += entryNet;
+            totalHours += entry.hours;
+            totalGross += entryGross;
+            totalNet += entryNet;
+        }
     });
 
-    // כאן היה הבאג - שיניתי את שמות המפתחות
     return { 
         totalHours, 
         grossSalary: totalGross, 
         netSalary: totalNet 
     };
-  }, [entries, settingsMap]);
+  }, [entries, settingsMap, viewMonth, viewYear]);
 
   // Determine what to display
   const displayStats = statsView === 'current' ? currentStats : globalStats;
@@ -389,20 +417,33 @@ const WorkLogApp = () => {
             )}
           </div>
 
-          {/* --- Stats Toggle Switch --- */}
-          <div className="flex bg-emerald-800/40 p-1 rounded-lg mb-4 w-fit mx-auto md:mx-0">
-            <button 
-                onClick={() => setStatsView('current')}
-                className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-bold transition-all ${!isGlobal ? 'bg-white text-emerald-700 shadow-sm' : 'text-emerald-200 hover:text-white'}`}
-            >
-                <Target className="w-3 h-3" /> עבודה נוכחית
-            </button>
-            <button 
-                onClick={() => setStatsView('global')}
-                className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-bold transition-all ${isGlobal ? 'bg-slate-700 text-white shadow-sm' : 'text-emerald-200 hover:text-white'}`}
-            >
-                <LayoutDashboard className="w-3 h-3" /> סיכום כללי
-            </button>
+          {/* --- View Controls (Month Selector & Mode) --- */}
+          <div className="flex flex-col gap-3 mb-2">
+            {/* 1. Month Navigation */}
+            <div className="flex items-center justify-between bg-emerald-800/40 p-2 rounded-lg">
+                <button onClick={() => changeViewMonth(-1)} className="p-1 hover:bg-emerald-700 rounded-full transition-colors"><ChevronRight className="w-5 h-5 text-emerald-100" /></button>
+                <div className="text-emerald-50 font-bold text-sm md:text-base flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-emerald-200" />
+                    {monthDisplay}
+                </div>
+                <button onClick={() => changeViewMonth(1)} className="p-1 hover:bg-emerald-700 rounded-full transition-colors"><ChevronLeft className="w-5 h-5 text-emerald-100" /></button>
+            </div>
+
+            {/* 2. Mode Selector */}
+            <div className="flex bg-emerald-800/40 p-1 rounded-lg w-fit mx-auto md:mx-0">
+                <button 
+                    onClick={() => setStatsView('current')}
+                    className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-bold transition-all ${!isGlobal ? 'bg-white text-emerald-700 shadow-sm' : 'text-emerald-200 hover:text-white'}`}
+                >
+                    <Target className="w-3 h-3" /> נוכחית
+                </button>
+                <button 
+                    onClick={() => setStatsView('global')}
+                    className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-xs font-bold transition-all ${isGlobal ? 'bg-slate-700 text-white shadow-sm' : 'text-emerald-200 hover:text-white'}`}
+                >
+                    <LayoutDashboard className="w-3 h-3" /> כללי
+                </button>
+            </div>
           </div>
 
           {/* --- Stats Grid --- */}
@@ -410,28 +451,22 @@ const WorkLogApp = () => {
              
              {/* Box 1: Hours */}
              <div className={`px-2 py-2 md:px-5 md:py-3 rounded-xl backdrop-blur-md text-center border ${isGlobal ? 'bg-slate-700/50 border-slate-500/30' : 'bg-white/10 border-emerald-400/20'}`}>
-                <span className={`${isGlobal ? 'text-slate-300' : 'text-emerald-100'} text-[10px] md:text-xs font-bold uppercase block mb-1`}>סה"כ שעות</span>
+                <span className={`${isGlobal ? 'text-slate-300' : 'text-emerald-100'} text-[10px] md:text-xs font-bold uppercase block mb-1`}>שעות חודשי</span>
                 <span className="text-xl md:text-3xl font-bold">{displayStats.totalHours}</span>
              </div>
              
              {/* Box 2: Gross */}
              <div className={`px-2 py-2 md:px-5 md:py-3 rounded-xl backdrop-blur-md text-center border ${isGlobal ? 'bg-slate-700/50 border-slate-500/30' : 'bg-white/10 border-emerald-400/20'}`}>
-                <span className={`${isGlobal ? 'text-slate-300' : 'text-emerald-100'} text-[10px] md:text-xs font-bold uppercase block mb-1`}>סה"כ ברוטו</span>
+                <span className={`${isGlobal ? 'text-slate-300' : 'text-emerald-100'} text-[10px] md:text-xs font-bold uppercase block mb-1`}>ברוטו חודשי</span>
                 <span className="text-xl md:text-3xl font-bold">₪{(displayStats.grossSalary || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
              </div>
              
              {/* Box 3: Net */}
              <div className={`px-2 py-2 md:px-5 md:py-3 rounded-xl backdrop-blur-md text-center shadow-inner border ${isGlobal ? 'bg-blue-600/40 border-blue-400/40 text-blue-50' : 'bg-emerald-900/30 border-emerald-400/40 text-emerald-50'}`}>
-                <span className={`${isGlobal ? 'text-blue-200' : 'text-emerald-200'} text-[10px] md:text-xs font-bold uppercase block mb-1`}>נטו (משוער)</span>
+                <span className={`${isGlobal ? 'text-blue-200' : 'text-emerald-200'} text-[10px] md:text-xs font-bold uppercase block mb-1`}>נטו חודשי</span>
                 <span className="text-xl md:text-3xl font-bold">₪{(displayStats.netSalary || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
              </div>
           </div>
-          
-          {isGlobal && (
-             <div className="text-center mt-2 text-[10px] text-slate-300 opacity-70">
-                 * מציג נתונים מכל העבודות והשנים יחד
-             </div>
-          )}
 
         </header>
 
@@ -472,16 +507,16 @@ const WorkLogApp = () => {
 
           <section>
              <h2 className="font-bold text-slate-700 mb-3 flex justify-between text-sm md:text-base">
-               <span>היסטוריה ({currentJob})</span>
-               <span className="bg-slate-200 text-slate-600 text-xs px-2 py-1 rounded-full">{currentJobEntries.length}</span>
+               <span>היסטוריה ({monthDisplay})</span>
+               <span className="bg-slate-200 text-slate-600 text-xs px-2 py-1 rounded-full">{filteredHistoryEntries.length}</span>
              </h2>
              <div className="space-y-2 max-h-[350px] overflow-y-auto pl-1 custom-scrollbar">
                {dataLoading ? (
                   <div className="text-center py-4"><Loader2 className="animate-spin w-6 h-6 mx-auto text-emerald-600"/></div>
-               ) : currentJobEntries.length === 0 ? (
-                  <div className="text-center py-8 text-slate-400 border-2 border-dashed border-slate-200 rounded-xl"><p className="text-sm">עדיין לא דווחו שעות</p></div>
+               ) : filteredHistoryEntries.length === 0 ? (
+                  <div className="text-center py-8 text-slate-400 border-2 border-dashed border-slate-200 rounded-xl"><p className="text-sm">אין נתונים לחודש זה</p></div>
                ) : (
-                currentJobEntries.map((entry) => (
+                filteredHistoryEntries.map((entry) => (
                   <div key={entry.id} className="bg-white p-3 rounded border flex justify-between items-center hover:shadow-sm">
                     <div className="flex items-center gap-3 overflow-hidden">
                       <div className="bg-emerald-50 text-emerald-700 font-bold w-10 h-10 rounded flex items-center justify-center shrink-0">
